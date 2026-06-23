@@ -156,6 +156,7 @@ model User {
   assignedInquiries       Inquiry[]            @relation("InquiryAssignee")
   managedDepts            Department[]         @relation("DeptManager")
   orderApprovals          OrderApproval[]      @relation("OrderApprover")
+  invoiceApprovals        InvoiceApproval[]    @relation("InvoiceApprover")
 }
 
 model Customer {
@@ -562,27 +563,41 @@ model OrderItem {
 }
 
 model Invoice {
-  id            String          @id @default(cuid())
+  id            String            @id @default(cuid())
   projectId     String
-  project       Project         @relation(fields: [projectId], references: [id])
+  project       Project           @relation(fields: [projectId], references: [id])
   customerId    String?
-  customer      Customer?       @relation(fields: [customerId], references: [id])
-  invoiceNumber String          @unique
+  customer      Customer?         @relation(fields: [customerId], references: [id])
+  invoiceNumber String            @unique
   invoiceDate   DateTime?
   dueDate       DateTime?
   amount        Float
   taxAmount     Float
   totalAmount   Float
-  status        String          @default("未作成")
+  status        String            @default("未作成")
   paidDate       DateTime?
   notes          String?
+  rejectReason   String?
   reminderSentAt DateTime?
-  reminderCount  Int             @default(0)
+  reminderCount  Int               @default(0)
   companyId      String
-  company        Company         @relation(fields: [companyId], references: [id])
-  createdAt      DateTime        @default(now())
+  company        Company           @relation(fields: [companyId], references: [id])
+  createdAt      DateTime          @default(now())
   items          InvoiceItem[]
   payments       PaymentRecord[]
+  approvals      InvoiceApproval[]
+}
+
+model InvoiceApproval {
+  id         String   @id @default(cuid())
+  invoiceId  String
+  invoice    Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  approverId String
+  approver   User     @relation("InvoiceApprover", fields: [approverId], references: [id])
+  level      Int      @default(1)
+  action     String   // '承認' | '差し戻し'
+  comment    String?
+  createdAt  DateTime @default(now())
 }
 
 model InvoiceItem {
@@ -642,6 +657,7 @@ model Drawing {
   isLatest      Boolean          @default(true)
   filePath      String
   description   String?
+  sharedWith    String?          // JSON array of userId strings; null means public to all
   createdAt     DateTime         @default(now())
   pins          DrawingPin[]
   versions      DrawingVersion[]
