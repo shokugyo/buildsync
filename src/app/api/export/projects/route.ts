@@ -18,19 +18,25 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: 'desc' },
   })
 
-  const header = ['案件番号', '案件名', '顧客名', '現場住所', 'ステータス', '営業担当', '現場監督', '着工予定日', '完工予定日', '契約金額', '予定原価', '粗利予定']
-  const rows = projects.map(p => {
-    const contract = p.contractAmount ?? 0
-    const cost = p.estimatedCost ?? 0
-    const grossProfit = contract > 0 || cost > 0 ? contract - cost : ''
-    return [
-      p.projectNumber, p.name, p.customer?.name ?? '', p.address ?? '', p.status,
-      p.sales?.name ?? '', p.manager?.name ?? '',
-      p.startDate ? new Date(p.startDate).toLocaleDateString('ja-JP') : '',
-      p.endDate ? new Date(p.endDate).toLocaleDateString('ja-JP') : '',
-      String(p.contractAmount ?? ''), String(p.estimatedCost ?? ''), String(grossProfit),
-    ]
-  })
+  const fmtDate = (d: Date | null | undefined) =>
+    d ? new Date(d).toISOString().slice(0, 10) : ''
+
+  const header = ['案件番号', '案件名', '顧客名', '現場住所', '工事種別', 'ステータス', '担当者名', '着工予定日', '完工予定日', '引渡予定日', '契約金額', '実行予算', '登録日時']
+  const rows = projects.map(p => [
+    p.projectNumber,
+    p.name,
+    p.customer?.name ?? '',
+    p.address ?? '',
+    p.workType ?? '',
+    p.status,
+    p.manager?.name ?? '',
+    fmtDate(p.startDate),
+    fmtDate(p.endDate),
+    fmtDate(p.deliveryDate),
+    String(p.contractAmount ?? ''),
+    String(p.estimatedCost ?? ''),
+    fmtDate(p.createdAt),
+  ])
 
   const bom = '\uFEFF'
   const csv = bom + toCsv([header, ...rows])

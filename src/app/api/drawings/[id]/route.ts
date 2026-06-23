@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { notifyProjectMembers } from '@/lib/notify'
+import { logAudit } from '@/lib/audit'
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions)
@@ -21,6 +22,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   })
 
   if (!drawing) return NextResponse.json({ error: '図面が見つかりません' }, { status: 404 })
+
+  await logAudit({
+    userId: (session.user as any).id,
+    userName: (session.user as any).name || '',
+    action: 'drawing_view',
+    target: '図面',
+    targetId: drawing.id,
+    detail: drawing.name,
+    companyId: (session.user as any).companyId,
+  })
+
   return NextResponse.json(drawing)
 }
 
@@ -41,6 +53,16 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     include: { uploader: { select: { name: true } }, project: { select: { name: true, projectNumber: true } } },
   })
 
+  await logAudit({
+    userId: (session.user as any).id,
+    userName: (session.user as any).name || '',
+    action: 'drawing_update',
+    target: '図面',
+    targetId: drawing.id,
+    detail: drawing.name,
+    companyId: (session.user as any).companyId,
+  })
+
   await notifyProjectMembers({
     projectId: drawing.projectId,
     excludeUserId: (session.user as any).id,
@@ -48,6 +70,36 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     content: `${drawing.name} が更新されました`,
     type: 'drawing',
     link: `/projects/${drawing.projectId}?tab=drawings`,
+  })
+
+  return NextResponse.json(drawing)
+}
+
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const session = await getServerSession(authOptions)
+  if (!session) return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
+
+  const body = await req.json()
+
+  const updateData: Record<string, unknown> = {}
+  if (body.sharedWith !== undefined) {
+    updateData.sharedWith = body.sharedWith === null ? null : JSON.stringify(body.sharedWith)
+  }
+
+  const drawing = await (prisma.drawing as any).update({
+    where: { id: params.id },
+    data: updateData,
+    include: { uploader: { select: { name: true } }, project: { select: { name: true, projectNumber: true } } },
+  })
+
+  await logAudit({
+    userId: (session.user as any).id,
+    userName: (session.user as any).name || '',
+    action: 'drawing_update',
+    target: '図面',
+    targetId: drawing.id,
+    detail: drawing.name,
+    companyId: (session.user as any).companyId,
   })
 
   return NextResponse.json(drawing)

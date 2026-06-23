@@ -18,6 +18,7 @@ interface Photo {
 }
 
 type LayoutOption = 2 | 4 | 6
+type PrintMode = 'internal' | 'client'
 
 function PhotoReportContent() {
   const searchParams = useSearchParams()
@@ -31,6 +32,7 @@ function PhotoReportContent() {
   const [layout, setLayout] = useState<LayoutOption>(4)
   const [showCover, setShowCover] = useState(true)
   const [companyName, setCompanyName] = useState('BuildSync 株式会社')
+  const [printMode, setPrintMode] = useState<PrintMode>('internal')
 
   useEffect(() => {
     const url = projectId ? `/api/photos?projectId=${projectId}` : '/api/photos'
@@ -156,6 +158,7 @@ function PhotoReportContent() {
           </button>
           <div className="text-sm font-medium text-slate-700">
             工事写真帳 — {projectName || 'すべての案件'} ({selectionMode ? `${selectedIds.size}/` : ''}{photos.length}枚)
+            {printMode === 'client' && <span className="ml-2 text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">施主向け</span>}
           </div>
           <button
             onClick={() => window.print()}
@@ -167,6 +170,19 @@ function PhotoReportContent() {
 
         {/* Options row */}
         <div className="flex flex-wrap items-center gap-4 px-4 pb-3 border-t border-slate-100 pt-2.5">
+          {/* Print mode selector */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-500">印刷モード:</span>
+            <select
+              value={printMode}
+              onChange={e => setPrintMode(e.target.value as PrintMode)}
+              className="border border-slate-300 rounded px-2 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="internal">自社向け（全情報表示）</option>
+              <option value="client">施主向け（業者名・金額・社内情報非表示）</option>
+            </select>
+          </div>
+
           {/* Layout options */}
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-slate-500">レイアウト:</span>
@@ -295,9 +311,11 @@ function PhotoReportContent() {
                 </div>
               )}
               <div style={{ borderTop: '2px solid #1e3a5f', width: '120px', margin: '32px auto' }} />
-              <div style={{ fontSize: '12pt', color: '#374151', fontWeight: 600, marginBottom: '8px' }}>
-                {companyName}
-              </div>
+              {printMode === 'internal' && (
+                <div style={{ fontSize: '12pt', color: '#374151', fontWeight: 600, marginBottom: '8px' }}>
+                  {companyName}
+                </div>
+              )}
               <div style={{ fontSize: '10pt', color: '#9ca3af' }}>
                 作成日: {today}
               </div>
@@ -349,7 +367,7 @@ function PhotoReportContent() {
                   )}
                 </div>
                 <div style={{ textAlign: 'right', fontSize: '9pt', color: '#6b7280' }}>
-                  <div>{companyName}</div>
+                  {printMode === 'internal' && <div>{companyName}</div>}
                   <div>作成日: {today}</div>
                   <div style={{ fontWeight: 700, color: '#1e3a5f' }}>
                     {pageNum} / {totalPages} ページ
@@ -418,31 +436,38 @@ function PhotoReportContent() {
                       )}
                     </div>
 
-                    {/* Caption area */}
+                    {/* Caption area (blackboard style) */}
                     <div
                       style={{
                         padding: layout === 6 ? '3px 5px' : '5px 7px',
-                        background: '#ffffff',
-                        borderTop: '1px solid #e5e7eb',
+                        background: '#f8fafc',
+                        borderTop: '2px solid #1e3a5f',
                         fontSize: layout === 6 ? '7pt' : '8pt',
                         color: '#374151',
                         flex: 1,
                       }}
                     >
+                      {/* 工事名 */}
+                      {photo.project?.name && (
+                        <div style={{ marginBottom: '2px' }}>
+                          <span style={{ color: '#64748b', fontWeight: 600 }}>工事名: </span>
+                          <span style={{ fontWeight: 700 }}>{photo.project.name}</span>
+                        </div>
+                      )}
                       <div
                         style={{
                           display: 'grid',
                           gridTemplateColumns: '1fr 1fr',
-                          gap: '2px 8px',
+                          gap: '1px 8px',
                           marginBottom: '2px',
                         }}
                       >
                         <div>
-                          <span style={{ color: '#9ca3af' }}>種別: </span>
+                          <span style={{ color: '#64748b' }}>工種: </span>
                           <span style={{ fontWeight: 600 }}>{photo.shootingType || photo.category || '−'}</span>
                         </div>
                         <div>
-                          <span style={{ color: '#9ca3af' }}>日付: </span>
+                          <span style={{ color: '#64748b' }}>撮影日: </span>
                           <span>
                             {new Date(photo.createdAt).toLocaleDateString('ja-JP', {
                               year: 'numeric',
@@ -451,19 +476,18 @@ function PhotoReportContent() {
                             })}
                           </span>
                         </div>
-                      </div>
-                      <div style={{ marginBottom: '2px' }}>
-                        <span style={{ color: '#9ca3af' }}>ファイル: </span>
-                        <span style={{ fontFamily: 'monospace' }}>
-                          {photo.filePath ? photo.filePath.split('/').pop() : '−'}
-                        </span>
-                      </div>
-                      {photo.location && (
-                        <div style={{ marginBottom: '2px' }}>
-                          <span style={{ color: '#9ca3af' }}>場所: </span>
-                          <span>{photo.location}</span>
+                        <div>
+                          <span style={{ color: '#64748b' }}>場所: </span>
+                          <span>{photo.location || '−'}</span>
                         </div>
-                      )}
+                        {printMode === 'internal' && (
+                          <div>
+                            <span style={{ color: '#64748b' }}>施工会社: </span>
+                            <span>{photo.uploader?.name || '−'}</span>
+                          </div>
+                        )}
+                      </div>
+                      {/* 施工内容（社内メモ） */}
                       {photo.comment && (
                         <div
                           style={{
@@ -473,15 +497,27 @@ function PhotoReportContent() {
                             display: '-webkit-box',
                             WebkitLineClamp: layout === 6 ? 1 : 2,
                             WebkitBoxOrient: 'vertical' as const,
+                            marginBottom: '2px',
                           }}
                         >
-                          <span style={{ color: '#9ca3af' }}>コメント: </span>
+                          <span style={{ color: '#64748b' }}>
+                            {printMode === 'internal' ? '社内メモ: ' : '施工内容: '}
+                          </span>
                           {photo.comment}
                         </div>
                       )}
-                      <div style={{ color: '#9ca3af', fontSize: '7pt', marginTop: '2px' }}>
-                        撮影者: {photo.uploader?.name || '−'}
-                      </div>
+                      {printMode === 'internal' && (
+                        <>
+                          {photo.tags && (
+                            <div style={{ color: '#9ca3af', fontSize: '7pt', marginTop: '2px' }}>
+                              タグ: {photo.tags}
+                            </div>
+                          )}
+                          <div style={{ color: '#9ca3af', fontSize: '7pt', marginTop: '1px' }}>
+                            ファイル: {photo.filePath ? photo.filePath.split('/').pop() : '−'}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -511,7 +547,11 @@ function PhotoReportContent() {
                   color: '#9ca3af',
                 }}
               >
-                <span>BuildSync 工事写真管理システム</span>
+                {printMode === 'client' ? (
+                  <span>{projectName ? `${projectName} 施工記録（施主提出用）` : '施工記録（施主提出用）'}</span>
+                ) : (
+                  <span>BuildSync 工事写真管理システム</span>
+                )}
                 <span>総写真枚数: {printPhotos.length}枚</span>
                 <span>
                   ページ {pageNum} / {totalPages}

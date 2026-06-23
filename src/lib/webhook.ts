@@ -79,3 +79,11 @@ export async function dispatchWebhook(companyId: string, event: string, payload:
     }
   }))
 }
+
+/**
+ * sendWebhook — alias for dispatchWebhook with parameter order matching spec.
+ * sendWebhook(event, data, companyId)
+ */
+export async function sendWebhook(event: string, data: unknown, companyId: string): Promise<void> {
+  return dispatchWebhook(companyId, event, data as object)
+}

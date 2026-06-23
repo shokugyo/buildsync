@@ -120,6 +120,14 @@ export default function OrderDetailPage() {
               <Printer className="w-4 h-4" />
               注文請書
             </Link>
+            <Link
+              href={`/orders/${order.id}/confirm`}
+              target="_blank"
+              className="flex items-center gap-1.5 border border-blue-300 text-blue-700 px-3 py-1.5 rounded-lg text-sm hover:bg-blue-50"
+            >
+              <Printer className="w-4 h-4" />
+              注文請書を印刷
+            </Link>
             {order.status === '発注済' && (
               <button
                 onClick={handleDeliver}

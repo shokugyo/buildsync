@@ -27,14 +27,15 @@ interface Photo {
   tags?: string | null
 }
 
-const DEFECT_STATUSES = ['未対応', '対応中', '確認待ち', '確認済', '差戻し']
+const DEFECT_STATUSES = ['未対応', '対応中', '確認待ち', '確認済', '差戻し', '再是正中']
 
 const STATUS_COLORS: Record<string, string> = {
   '未対応': 'bg-red-100 text-red-700',
   '対応中': 'bg-yellow-100 text-yellow-700',
   '確認待ち': 'bg-blue-100 text-blue-700',
   '確認済': 'bg-green-100 text-green-700',
-  '差戻し': 'bg-purple-100 text-purple-700',
+  '差戻し': 'bg-orange-100 text-orange-700',
+  '再是正中': 'bg-purple-100 text-purple-700',
 }
 
 export default function DefectsPage() {
@@ -189,7 +190,7 @@ export default function DefectsPage() {
     setTransitioning(id)
     try {
       const res = await fetch(`/api/defects/${id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       })
@@ -248,7 +249,15 @@ export default function DefectsPage() {
           {DEFECT_STATUSES.map((s) => (
             <div key={s} className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
               <p className="text-xs text-slate-500 mb-1">{s}</p>
-              <p className={`text-2xl font-bold ${s === '未対応' ? 'text-red-600' : s === '対応中' ? 'text-yellow-600' : s === '確認待ち' ? 'text-blue-600' : s === '差戻し' ? 'text-purple-600' : 'text-green-600'}`}>
+              <p className={`text-2xl font-bold ${
+                s === '未対応' ? 'text-red-600'
+                : s === '対応中' ? 'text-yellow-600'
+                : s === '確認待ち' ? 'text-blue-600'
+                : s === '確認済' ? 'text-green-600'
+                : s === '差戻し' ? 'text-orange-600'
+                : s === '再是正中' ? 'text-purple-600'
+                : 'text-slate-600'
+              }`}>
                 {statusCounts[s] || 0}
               </p>
             </div>
@@ -356,7 +365,7 @@ export default function DefectsPage() {
                                 disabled={busy}
                                 className="flex items-center gap-1 text-xs px-2 py-1 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-200 rounded-md transition-colors disabled:opacity-50"
                               >
-                                <ClipboardCheck className="w-3 h-3" /> 着手
+                                <ClipboardCheck className="w-3 h-3" /> 対応着手
                               </button>
                             )}
                             {d.status === '対応中' && (
@@ -365,7 +374,7 @@ export default function DefectsPage() {
                                 disabled={busy}
                                 className="flex items-center gap-1 text-xs px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-md transition-colors disabled:opacity-50"
                               >
-                                <ClipboardCheck className="w-3 h-3" /> 是正報告
+                                <ClipboardCheck className="w-3 h-3" /> 完了報告
                               </button>
                             )}
                             {d.status === '確認待ち' && (
@@ -375,12 +384,12 @@ export default function DefectsPage() {
                                   disabled={busy}
                                   className="flex items-center gap-1 text-xs px-2 py-1 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded-md transition-colors disabled:opacity-50"
                                 >
-                                  <CheckCircle className="w-3 h-3" /> 確認OK
+                                  <CheckCircle className="w-3 h-3" /> 確認済
                                 </button>
                                 <button
                                   onClick={() => quickStatus(d.id, '差戻し')}
                                   disabled={busy}
-                                  className="flex items-center gap-1 text-xs px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-md transition-colors disabled:opacity-50"
+                                  className="flex items-center gap-1 text-xs px-2 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-md transition-colors disabled:opacity-50"
                                 >
                                   <RotateCcw className="w-3 h-3" /> 差戻し
                                 </button>
@@ -388,11 +397,20 @@ export default function DefectsPage() {
                             )}
                             {d.status === '差戻し' && (
                               <button
-                                onClick={() => quickStatus(d.id, '対応中')}
+                                onClick={() => quickStatus(d.id, '再是正中')}
                                 disabled={busy}
-                                className="flex items-center gap-1 text-xs px-2 py-1 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-200 rounded-md transition-colors disabled:opacity-50"
+                                className="flex items-center gap-1 text-xs px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-md transition-colors disabled:opacity-50"
                               >
-                                <ClipboardCheck className="w-3 h-3" /> 再対応
+                                <RotateCcw className="w-3 h-3" /> 再是正開始
+                              </button>
+                            )}
+                            {d.status === '再是正中' && (
+                              <button
+                                onClick={() => openReport(d)}
+                                disabled={busy}
+                                className="flex items-center gap-1 text-xs px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-md transition-colors disabled:opacity-50"
+                              >
+                                <ClipboardCheck className="w-3 h-3" /> 再完了報告
                               </button>
                             )}
                             {d.status === '確認済' && (

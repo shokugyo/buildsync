@@ -77,16 +77,29 @@ export default function WorkerIdCardPage() {
 
   useEffect(() => {
     if (!workerName) return
-    let qrContent: string
-    if (userId && projectId) {
-      qrContent = `BUILDSYNC:${userId}:${projectId}`
-    } else {
+
+    const buildQrContent = async () => {
+      // Priority 1: WorkerRoster ID (最もスキャン効率が良い)
+      // userId が WorkerRoster の ID として渡されることを想定
+      // 形式: BUILDSYNC:<WorkerRosterId>
+      if (userId) {
+        // userId が WorkerRoster ID かどうかチェック（projectId が空の場合）
+        if (!projectId) {
+          return `BUILDSYNC:${userId}`
+        }
+        // 旧来の BUILDSYNC:userId:projectId 形式 (後方互換)
+        return `BUILDSYNC:${userId}:${projectId}`
+      }
+      // フォールバック: Web URL
       const appUrl = typeof window !== 'undefined' ? window.location.origin : ''
-      qrContent = `${appUrl}/attendance/checkin?workerName=${encodeURIComponent(workerName)}&company=${encodeURIComponent(company)}`
+      return `${appUrl}/attendance/checkin?workerName=${encodeURIComponent(workerName)}&company=${encodeURIComponent(company)}`
     }
-    QRCode.toDataURL(qrContent, { width: 200, margin: 1, color: { dark: '#1e293b', light: '#ffffff' } })
-      .then(setQrDataUrl)
-      .catch(console.error)
+
+    buildQrContent().then(qrContent => {
+      QRCode.toDataURL(qrContent, { width: 200, margin: 1, color: { dark: '#1e293b', light: '#ffffff' } })
+        .then(setQrDataUrl)
+        .catch(console.error)
+    })
   }, [workerName, company, userId, projectId])
 
   const getInitials = (name: string) => {

@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -803,15 +803,18 @@ model InspectionTemplate {
 }
 
 model AuditLog {
-  id        String   @id @default(cuid())
-  userId    String
-  userName  String
-  action    String
-  target    String
-  targetId  String?
-  detail    String?
-  companyId String
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  userId     String
+  userName   String
+  userEmail  String?
+  action     String
+  target     String
+  targetId   String?
+  targetName String?
+  detail     String?
+  ipAddress  String?
+  companyId  String
+  createdAt  DateTime @default(now())
 }
 
 model Lead {

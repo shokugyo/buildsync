@@ -258,11 +258,14 @@ export default function PhotosPage() {
   const blackboardShowPhoto = blackboardShowId ? photos.find((p) => p.id === blackboardShowId) ?? null : null
 
   const getBlackboardInitialData = (photo: Photo | null): BlackboardData => {
-    if (!photo) return { projectName: '', date: new Date().toISOString().slice(0, 16), location: '', photographer: '', note: '' }
+    if (!photo) return { projectName: '', workType: '', constructionContent: '', constructionCompany: '', date: new Date().toISOString().slice(0, 16), location: '', photographer: '', note: '' }
     try {
       const bd = JSON.parse(photo.blackboardData || '{}')
       return {
         projectName: bd.projectName ?? photo.project?.name ?? '',
+        workType: bd.workType ?? '',
+        constructionContent: bd.constructionContent ?? '',
+        constructionCompany: bd.constructionCompany ?? '',
         date: bd.date ?? new Date(photo.createdAt).toISOString().slice(0, 16),
         location: bd.location ?? photo.location ?? '',
         photographer: bd.photographer ?? photo.uploader?.name ?? '',
@@ -271,6 +274,9 @@ export default function PhotosPage() {
     } catch {
       return {
         projectName: photo.project?.name ?? '',
+        workType: '',
+        constructionContent: '',
+        constructionCompany: '',
         date: new Date(photo.createdAt).toISOString().slice(0, 16),
         location: photo.location ?? '',
         photographer: photo.uploader?.name ?? '',
@@ -909,6 +915,12 @@ export default function PhotosPage() {
             <option value="asc">古い順</option>
           </select>
           <div className="ml-auto flex items-center gap-2">
+            <Link
+              href="/photos/360"
+              className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              <span className="text-xs font-bold">360°</span> 360°写真
+            </Link>
             <button
               onClick={() => {
                 const project = projects.find((p) => p.projectNumber === projectFilter)

@@ -46,16 +46,26 @@ function getStatusProgressColor(status: string): string {
   }
 }
 
+type PrintMode = 'internal' | 'client'
+
 function GanttPrintContent() {
   const searchParams = useSearchParams()
   const projectId = searchParams.get('projectId')
   const monthParam = searchParams.get('month') // YYYY-MM
-  const ownerView = searchParams.get('ownerView') === '1'
+  // Support legacy ownerView param and new mode=client param
+  const modeParam = searchParams.get('mode')
+  const ownerViewParam = searchParams.get('ownerView')
+  const initialMode: PrintMode =
+    modeParam === 'client' || ownerViewParam === '1' ? 'client' : 'internal'
 
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [projectName, setProjectName] = useState('')
   const [company, setCompany] = useState<{ name?: string } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [printMode, setPrintMode] = useState<PrintMode>(initialMode)
+
+  // Derived boolean for convenience
+  const isClientMode = printMode === 'client'
 
   useEffect(() => {
     const url = projectId ? `/api/schedules?projectId=${projectId}` : '/api/schedules'
@@ -135,6 +145,15 @@ function GanttPrintContent() {
   const DAY_W = totalDays <= 31 ? 22 : totalDays <= 60 ? 16 : 12
   const LEFT_W = 160
 
+  // Build URL helpers for mode switching
+  const baseParams = [
+    projectId ? `projectId=${projectId}` : '',
+    monthParam ? `month=${monthParam}` : '',
+  ].filter(Boolean).join('&')
+
+  const clientModeUrl = `/schedule/print?mode=client${baseParams ? '&' + baseParams : ''}`
+  const internalModeUrl = `/schedule/print${baseParams ? '?' + baseParams : ''}`
+
   return (
     <div className="bg-white min-h-screen font-sans" style={{ fontSize: 11 }}>
       <style>{`
@@ -148,54 +167,84 @@ function GanttPrintContent() {
       `}</style>
 
       {/* Toolbar - hidden on print */}
-      <div className="no-print flex items-center gap-3 p-4 border-b border-slate-200 bg-white sticky top-0 z-50">
+      <div className="no-print flex flex-wrap items-center gap-3 p-4 border-b border-slate-200 bg-white sticky top-0 z-50">
+        {/* Print mode radio buttons */}
+        <div className="flex items-center gap-4 mr-4">
+          <span className="text-xs font-medium text-slate-600">印刷モード：</span>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="radio"
+              name="printMode"
+              value="internal"
+              checked={printMode === 'internal'}
+              onChange={() => setPrintMode('internal')}
+              className="w-3.5 h-3.5 text-blue-600"
+            />
+            <span className="text-sm text-slate-700">自社向け（全情報表示・担当協力会社名・金額）</span>
+          </label>
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="radio"
+              name="printMode"
+              value="client"
+              checked={printMode === 'client'}
+              onChange={() => setPrintMode('client')}
+              className="w-3.5 h-3.5 text-green-600"
+            />
+            <span className="text-sm text-slate-700">施主向け（業者名・金額・社内コメント非表示）</span>
+          </label>
+        </div>
+
         <button
           onClick={() => window.print()}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
+          className={`px-4 py-2 rounded-lg text-sm font-medium ${isClientMode ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
         >
-          {ownerView ? '施主用印刷（業者名なし）' : '自社用印刷'}
+          {isClientMode ? '施主用印刷' : '自社用印刷'}
         </button>
-        {ownerView ? (
-          <a
-            href={`/schedule/print${projectId ? `?projectId=${projectId}` : ''}${monthParam ? `${projectId ? '&' : '?'}month=${monthParam}` : ''}`}
-            className="border border-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50"
-          >
-            自社用に切替
-          </a>
-        ) : (
-          <a
-            href={`/schedule/print?ownerView=1${projectId ? `&projectId=${projectId}` : ''}${monthParam ? `&month=${monthParam}` : ''}`}
-            className="border border-green-400 text-green-700 bg-green-50 px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-100"
-          >
-            施主用印刷（業者名なし）
-          </a>
-        )}
+
         <button
           onClick={() => window.history.back()}
           className="border border-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50"
         >
           戻る
         </button>
-        {ownerView && (
-          <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">施主用（業者名非表示）</span>
+
+        {isClientMode && (
+          <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-full font-medium">施主用（業者名・金額非表示）</span>
         )}
+
         <div className="flex items-center gap-4 ml-4 text-xs text-slate-500">
           <span className="flex items-center gap-1"><span style={{ display:'inline-block', width:12, height:12, background:'#3b82f6', borderRadius:2 }} /> 未着手</span>
           <span className="flex items-center gap-1"><span style={{ display:'inline-block', width:12, height:12, background:'#f59e0b', borderRadius:2 }} /> 進行中</span>
           <span className="flex items-center gap-1"><span style={{ display:'inline-block', width:12, height:12, background:'#22c55e', borderRadius:2 }} /> 完了</span>
           <span className="flex items-center gap-1"><span style={{ display:'inline-block', width:12, height:12, background:'#ef4444', borderRadius:2 }} /> 遅延</span>
         </div>
+
+        {/* URL hint for client mode linking */}
+        <div className="ml-auto text-xs text-slate-400">
+          施主向け直リンク: <code className="bg-slate-100 px-1 rounded">{clientModeUrl}</code>
+        </div>
       </div>
 
       <div className="page-container p-6">
-        {/* Header */}
+        {/* Header - switches between internal and client */}
         <div className="flex justify-between items-start mb-4">
           <div>
-            <h1 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>工　程　表（ガントチャート）</h1>
-            {projectName && <p style={{ fontSize: 12, color: '#475569' }}>案件：{projectName}</p>}
+            {isClientMode ? (
+              <>
+                <h1 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
+                  {projectName ? `${projectName} 工程表（施主提出用）` : '工程表（施主提出用）'}
+                </h1>
+              </>
+            ) : (
+              <>
+                <h1 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>工　程　表（ガントチャート）</h1>
+                {projectName && <p style={{ fontSize: 12, color: '#475569' }}>案件：{projectName}</p>}
+              </>
+            )}
           </div>
           <div style={{ textAlign: 'right', fontSize: 11, color: '#475569' }}>
-            {!ownerView && <p style={{ fontWeight: 700 }}>{company?.name || ''}</p>}
+            {!isClientMode && <p style={{ fontWeight: 700 }}>{company?.name || ''}</p>}
             <p>出力日：{new Date().toLocaleDateString('ja-JP')}</p>
           </div>
         </div>
@@ -274,7 +323,8 @@ function GanttPrintContent() {
                     color: '#64748b',
                   }}
                 >
-                  担当者
+                  {/* Hide "担当者" column label in client mode */}
+                  {!isClientMode ? '担当者' : ''}
                 </th>
                 {days.map((d, i) => {
                   const dow = d.getDay()
@@ -386,8 +436,12 @@ function GanttPrintContent() {
                             <div style={{ fontWeight: 600, color: '#1e293b', fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {task.name}
                             </div>
-                            {!ownerView && task.assignee?.name && (
+                            {/* In client mode: hide assignee name, show role hint only */}
+                            {!isClientMode && task.assignee?.name && (
                               <div style={{ color: '#64748b', fontSize: 8 }}>{task.assignee.name}</div>
+                            )}
+                            {isClientMode && task.assignee?.name && (
+                              <div style={{ color: '#94a3b8', fontSize: 8 }}>現場監督</div>
                             )}
                           </td>
 
@@ -474,9 +528,17 @@ function GanttPrintContent() {
           </table>
         </div>
 
+        {/* Footer */}
         <div style={{ marginTop: 12, fontSize: 9, color: '#94a3b8', textAlign: 'right' }}>
-          合計 {schedules.length} 件{!ownerView && company?.name ? ` — ${company.name}` : ''} — 出力日時：{new Date().toLocaleString('ja-JP')}
+          合計 {schedules.length} 件{!isClientMode && company?.name ? ` — ${company.name}` : ''} — 出力日時：{new Date().toLocaleString('ja-JP')}
         </div>
+
+        {/* Client mode disclaimer footer */}
+        {isClientMode && (
+          <div style={{ marginTop: 8, fontSize: 9, color: '#64748b', textAlign: 'center', borderTop: '1px solid #e2e8f0', paddingTop: 6 }}>
+            本工程表は予定であり、工程は変更になる場合があります。
+          </div>
+        )}
       </div>
     </div>
   )

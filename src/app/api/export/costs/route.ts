@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { logAudit } from '@/lib/audit'
 
 function toCsv(rows: string[][]): string {
   return rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -13,6 +14,7 @@ export async function GET(req: NextRequest) {
   const companyId = (session.user as any).companyId
 
   const { searchParams } = new URL(req.url)
+  const format = searchParams.get('format') || 'csv'
   const mode = searchParams.get('mode') || 'summary'
 
   if (mode === 'detail') {
@@ -96,12 +98,35 @@ export async function GET(req: NextRequest) {
     ]
   })
 
+  await logAudit({
+    userId: (session.user as any).id,
+    userName: (session.user as any).name || '',
+    action: 'export_download',
+    target: '原価CSV',
+    detail: `format=${format}`,
+    companyId,
+  })
+
+  const dateStr = new Date().toISOString().slice(0, 10)
+
+  if (format === 'excel') {
+    // Excel形式: JSON でカラム・行データを返す（xlsxライブラリ未導入のためCSVをExcel互換で返す）
+    const bom = '\uFEFF'
+    const csv = bom + toCsv([header, ...rows])
+    return new NextResponse(csv, {
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="costs_${dateStr}.csv"`,
+      },
+    })
+  }
+
   const bom = '\uFEFF'
   const csv = bom + toCsv([header, ...rows])
   return new NextResponse(csv, {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="costs_${new Date().toISOString().slice(0, 10)}.csv"`,
+      'Content-Disposition': `attachment; filename="costs_${dateStr}.csv"`,
     },
   })
 }

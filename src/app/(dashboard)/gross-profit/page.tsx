@@ -175,14 +175,21 @@ export default function GrossProfitPage() {
           </div>
         )}
 
-        {/* CSV button */}
-        <div className="flex justify-end mb-4">
+        {/* Export buttons */}
+        <div className="flex justify-end gap-2 mb-4">
           <a
-            href="/api/export/gross-profit"
+            href="/api/export/gross-profit?format=csv"
             download
             className="flex items-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
             <Download className="w-4 h-4" /> CSV出力
+          </a>
+          <a
+            href="/api/export/gross-profit?format=excel"
+            download
+            className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Download className="w-4 h-4" /> Excel出力
           </a>
         </div>
 

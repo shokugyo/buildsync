@@ -3,8 +3,32 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Header from '@/components/Header'
 import { formatDate, getStatusColor } from '@/lib/utils'
-import { Plus, Edit2, Trash2, X, ChevronRight, ChevronDown, Printer, Download, Copy, Bell } from 'lucide-react'
+import { Plus, Edit2, Trash2, X, ChevronRight, ChevronDown, Printer, Download, Copy, Bell, Layers } from 'lucide-react'
 import Link from 'next/link'
+
+// ========== WBS型定義 ==========
+interface WBSNode {
+  id: string
+  name: string
+  type: 'project' | 'category' | 'task'
+  children?: WBSNode[]
+  item?: ScheduleItem
+  totalTasks?: number
+  completedTasks?: number
+  wbsCode?: string
+}
+
+// ========== 日本の祝日 ==========
+const JP_HOLIDAYS: string[] = [
+  '2025-01-01','2025-01-13','2025-02-11','2025-02-23','2025-02-24',
+  '2025-03-20','2025-04-29','2025-05-03','2025-05-04','2025-05-05','2025-05-06',
+  '2025-07-21','2025-08-11','2025-09-15','2025-09-23','2025-10-13',
+  '2025-11-03','2025-11-23','2025-11-24','2025-12-23',
+  '2026-01-01','2026-01-12','2026-02-11','2026-02-23',
+  '2026-03-20','2026-04-29','2026-05-03','2026-05-04','2026-05-05','2026-05-06',
+  '2026-07-20','2026-08-11','2026-09-21','2026-09-22','2026-09-23',
+  '2026-10-12','2026-11-03','2026-11-23',
+]
 
 interface ScheduleItem {
   id: string
@@ -296,7 +320,10 @@ const defaultForm = {
 export default function SchedulePage() {
   const [schedules, setSchedules] = useState<ScheduleItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [view, setView] = useState<'gantt' | 'list' | 'timeline' | 'supplier' | 'today'>('gantt')
+  const [view, setView] = useState<'gantt' | 'list' | 'timeline' | 'wbs' | 'calendar' | 'supplier' | 'today'>('gantt')
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
+  const [calendarYear, setCalendarYear] = useState<number>(() => new Date().getFullYear())
+  const [calendarMonth, setCalendarMonth] = useState<number>(() => new Date().getMonth())
   const [projects, setProjects] = useState<{ id: string; name: string; projectNumber: string }[]>([])
   const [users, setUsers] = useState<{ id: string; name: string }[]>([])
   const [masterCategories, setMasterCategories] = useState<string[]>([])
@@ -308,6 +335,14 @@ export default function SchedulePage() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [showCopyModal, setShowCopyModal] = useState(false)
   const [copySourceProjectId, setCopySourceProjectId] = useState('')
+  const [showTemplateModal, setShowTemplateModal] = useState(false)
+  const [templateTab, setTemplateTab] = useState<'template' | 'project'>('template')
+  const [scheduleTemplates, setScheduleTemplates] = useState<{ id: string; name: string; workType?: string | null; scheduleTemplates: { id: string; name: string; offsetDays: number; durationDays: number; category?: string | null }[] }[]>([])
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
+  const [templateSourceProjectId, setTemplateSourceProjectId] = useState('')
+  const [templateSourceSchedules, setTemplateSourceSchedules] = useState<ScheduleItem[]>([])
+  const [templateAdding, setTemplateAdding] = useState(false)
+  const [templateMessage, setTemplateMessage] = useState('')
   const [sendingNotif, setSendingNotif] = useState(false)
   const [dependencies, setDependencies] = useState<ScheduleDependency[]>([])
   const [newPredecessorId, setNewPredecessorId] = useState('')
@@ -533,6 +568,62 @@ export default function SchedulePage() {
     }
   }
 
+  const openTemplateModal = () => {
+    setTemplateTab('template')
+    setSelectedTemplateId('')
+    setTemplateSourceProjectId('')
+    setTemplateSourceSchedules([])
+    setTemplateMessage('')
+    if (scheduleTemplates.length === 0) {
+      fetch('/api/schedule-templates').then(r => r.json()).then(d => {
+        setScheduleTemplates(Array.isArray(d) ? d : [])
+      })
+    }
+    setShowTemplateModal(true)
+  }
+
+  const handleTemplateProjectChange = async (projectId: string) => {
+    setTemplateSourceProjectId(projectId)
+    setTemplateSourceSchedules([])
+    if (!projectId) return
+    const data = await fetch('/api/schedules').then(r => r.json())
+    const allSchedules: ScheduleItem[] = Array.isArray(data) ? data : []
+    setTemplateSourceSchedules(allSchedules.filter(s => s.project.id === projectId))
+  }
+
+  const handleAddFromTemplate = async () => {
+    if (!filterProjectId) {
+      alert('まず案件を選択してください（右上の案件フィルタ）')
+      return
+    }
+    if (templateTab === 'template' && !selectedTemplateId) return
+    if (templateTab === 'project' && !templateSourceProjectId) return
+
+    setTemplateAdding(true)
+    setTemplateMessage('')
+    try {
+      const body = templateTab === 'template'
+        ? { templateId: selectedTemplateId, targetProjectId: filterProjectId }
+        : { sourceProjectId: templateSourceProjectId, targetProjectId: filterProjectId }
+      const res = await fetch('/api/schedules/copy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setTemplateMessage(`${data.created}件の工程を追加しました`)
+        fetchSchedules()
+        setTimeout(() => {
+          setShowTemplateModal(false)
+          setTemplateMessage('')
+        }, 1500)
+      }
+    } finally {
+      setTemplateAdding(false)
+    }
+  }
+
   const toggleGroup = (key: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev)
@@ -649,12 +740,26 @@ export default function SchedulePage() {
             >
               本日作業
             </button>
-            <Link
-              href="/schedule/calendar"
-              className="px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px border-transparent text-slate-500 hover:text-slate-700"
+            <button
+              onClick={() => setView('wbs')}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                view === 'wbs'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              WBS
+            </button>
+            <button
+              onClick={() => setView('calendar')}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                view === 'calendar'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
             >
               カレンダー
-            </Link>
+            </button>
           </div>
 
           <div className="flex items-center gap-2">
@@ -694,6 +799,37 @@ export default function SchedulePage() {
                 >
                   次月
                 </button>
+              </>
+            )}
+            {view === 'calendar' && (
+              <>
+                <button
+                  onClick={() => {
+                    if (calendarMonth === 0) { setCalendarYear(y => y - 1); setCalendarMonth(11) }
+                    else setCalendarMonth(m => m - 1)
+                  }}
+                  className="px-3 py-1 text-sm border border-slate-300 rounded hover:bg-slate-50"
+                >
+                  前月
+                </button>
+                <button
+                  onClick={() => { setCalendarYear(new Date().getFullYear()); setCalendarMonth(new Date().getMonth()) }}
+                  className="px-3 py-1 text-sm border border-slate-300 rounded hover:bg-slate-50 font-medium"
+                >
+                  今月
+                </button>
+                <button
+                  onClick={() => {
+                    if (calendarMonth === 11) { setCalendarYear(y => y + 1); setCalendarMonth(0) }
+                    else setCalendarMonth(m => m + 1)
+                  }}
+                  className="px-3 py-1 text-sm border border-slate-300 rounded hover:bg-slate-50"
+                >
+                  次月
+                </button>
+                <span className="text-sm font-semibold text-slate-700 ml-1">
+                  {calendarYear}年{calendarMonth + 1}月
+                </span>
               </>
             )}
             <select
@@ -789,6 +925,12 @@ export default function SchedulePage() {
                 </button>
               </>
             )}
+            <button
+              onClick={openTemplateModal}
+              className="flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Layers className="w-4 h-4" /> テンプレートから追加
+            </button>
             <button
               onClick={openAdd}
               className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
@@ -983,6 +1125,251 @@ export default function SchedulePage() {
               )
             })()}
           </div>
+        ) : view === 'wbs' ? (
+          /* ---- WBS VIEW ---- */
+          (() => {
+            // プロジェクト → カテゴリ → タスクのツリーを構築
+            const projectMap = new Map<string, { proj: ScheduleItem['project']; catMap: Map<string, ScheduleItem[]> }>()
+            for (const s of filteredSchedules) {
+              if (!projectMap.has(s.project.id)) {
+                projectMap.set(s.project.id, { proj: s.project, catMap: new Map() })
+              }
+              const catKey = s.category || '未分類'
+              const { catMap } = projectMap.get(s.project.id)!
+              if (!catMap.has(catKey)) catMap.set(catKey, [])
+              catMap.get(catKey)!.push(s)
+            }
+
+            const wbsTree: WBSNode[] = Array.from(projectMap.entries()).map(([projId, { proj, catMap }], pi) => {
+              const catNodes: WBSNode[] = Array.from(catMap.entries()).map(([cat, tasks], ci) => {
+                const taskNodes: WBSNode[] = tasks.map((t, ti) => ({
+                  id: t.id,
+                  name: t.name,
+                  type: 'task' as const,
+                  item: t,
+                  wbsCode: `${pi + 1}.${ci + 1}.${ti + 1}`,
+                }))
+                return {
+                  id: `${projId}__${cat}`,
+                  name: cat,
+                  type: 'category' as const,
+                  children: taskNodes,
+                  totalTasks: tasks.length,
+                  completedTasks: tasks.filter(t => t.status === '完了').length,
+                }
+              })
+              return {
+                id: projId,
+                name: proj.name,
+                type: 'project' as const,
+                children: catNodes,
+                totalTasks: Array.from(catMap.values()).flat().length,
+                completedTasks: Array.from(catMap.values()).flat().filter(t => t.status === '完了').length,
+              }
+            })
+
+            const toggleNode = (id: string) => {
+              setExpandedNodes(prev => {
+                const next = new Set(prev)
+                if (next.has(id)) next.delete(id)
+                else next.add(id)
+                return next
+              })
+            }
+
+            return (
+              <div className="flex-1 overflow-auto bg-white rounded-xl shadow-sm border border-slate-100">
+                {wbsTree.length === 0 ? (
+                  <div className="text-center text-slate-400 p-12">工程がありません</div>
+                ) : (
+                  <table className="w-full border-collapse">
+                    <thead className="bg-slate-50 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase w-8">WBS</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase">工程名</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase w-28">開始日</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase w-28">終了日</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase w-32">進捗</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase w-24">担当者</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase w-20">状態</th>
+                        <th className="px-3 py-2 w-12" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {wbsTree.map((projNode, pi) => {
+                        const projExpanded = expandedNodes.has(projNode.id)
+                        return [
+                          // プロジェクト行
+                          <tr key={projNode.id} className="bg-slate-100 border-b border-slate-200 cursor-pointer hover:bg-slate-200" onClick={() => toggleNode(projNode.id)}>
+                            <td className="px-3 py-2 text-xs text-slate-500 font-mono">{pi + 1}</td>
+                            <td className="px-3 py-2" colSpan={5}>
+                              <div className="flex items-center gap-2">
+                                <span className="text-slate-500">{projExpanded ? '▼' : '▶'}</span>
+                                <span className="font-bold text-sm text-slate-800">{projNode.name}</span>
+                                <span className="text-xs text-slate-400 ml-1">({(projNode.children?.[0]?.item?.project?.projectNumber) ?? ''})</span>
+                                <span className="ml-auto text-xs text-slate-500">{projNode.completedTasks}/{projNode.totalTasks}件完了</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2" />
+                            <td className="px-3 py-2" />
+                          </tr>,
+                          // カテゴリ行・タスク行
+                          ...(projExpanded ? (projNode.children ?? []).map((catNode, ci) => {
+                            const catExpanded = expandedNodes.has(catNode.id)
+                            return [
+                              <tr key={catNode.id} className="bg-slate-50 border-b border-slate-100 cursor-pointer hover:bg-slate-100" onClick={() => toggleNode(catNode.id)}>
+                                <td className="px-3 py-2 text-xs text-slate-400 font-mono pl-6">{pi + 1}.{ci + 1}</td>
+                                <td className="px-3 py-2 pl-8" colSpan={5}>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-slate-400 text-xs">{catExpanded ? '▼' : '▶'}</span>
+                                    <span className="font-medium text-sm text-slate-700">{catNode.name}</span>
+                                    <span className="ml-auto text-xs text-slate-400">{catNode.completedTasks}/{catNode.totalTasks}件</span>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2" />
+                                <td className="px-3 py-2" />
+                              </tr>,
+                              ...(catExpanded ? (catNode.children ?? []).map((taskNode, ti) => {
+                                const t = taskNode.item!
+                                return (
+                                  <tr key={taskNode.id} className="border-b border-slate-50 hover:bg-slate-50 group">
+                                    <td className="px-3 py-2 text-xs text-slate-300 font-mono pl-10">{pi + 1}.{ci + 1}.{ti + 1}</td>
+                                    <td className="px-3 py-2 pl-12 text-sm text-slate-800">{t.name}</td>
+                                    <td className="px-3 py-2 text-xs text-slate-500">{t.startDate.split('T')[0]}</td>
+                                    <td className="px-3 py-2 text-xs text-slate-500">{t.endDate.split('T')[0]}</td>
+                                    <td className="px-3 py-2">
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex-1 bg-slate-100 rounded-full h-1.5">
+                                          <div className={`rounded-full h-1.5 ${t.progress === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${t.progress}%` }} />
+                                        </div>
+                                        <span className="text-xs text-slate-500 w-7 text-right">{t.progress}%</span>
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2 text-xs text-slate-600">{t.assignee?.name || '-'}</td>
+                                    <td className="px-3 py-2">
+                                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getStatusColor(t.status)}`}>{t.status}</span>
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <div className="flex gap-0.5 opacity-0 group-hover:opacity-100">
+                                        <button onClick={() => openEdit(t)} className="p-1 text-slate-400 hover:text-blue-600"><Edit2 className="w-3.5 h-3.5" /></button>
+                                        <button onClick={() => handleDelete(t.id)} className="p-1 text-slate-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )
+                              }) : []),
+                            ]
+                          }).flat() : []),
+                        ]
+                      }).flat()}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )
+          })()
+        ) : view === 'calendar' ? (
+          /* ---- カレンダー VIEW ---- */
+          (() => {
+            const firstDay = new Date(calendarYear, calendarMonth, 1)
+            const lastDay = new Date(calendarYear, calendarMonth + 1, 0)
+            const startDow = firstDay.getDay() // 0=日
+            const totalDays = lastDay.getDate()
+
+            // 当月の工程を取得
+            const monthStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}`
+            const monthSchedules = filteredSchedules.filter(s => {
+              const start = s.startDate.split('T')[0]
+              const end = s.endDate.split('T')[0]
+              return start.startsWith(monthStr) || end.startsWith(monthStr) ||
+                (start <= `${monthStr}-01` && end >= lastDay.toISOString().split('T')[0])
+            })
+
+            // カレンダーセルを生成（6週 × 7日）
+            const cells: (number | null)[] = []
+            for (let i = 0; i < startDow; i++) cells.push(null)
+            for (let d = 1; d <= totalDays; d++) cells.push(d)
+            while (cells.length % 7 !== 0) cells.push(null)
+            const weeks: (number | null)[][] = []
+            for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7))
+
+            const todayStr2 = new Date().toISOString().split('T')[0]
+
+            const getCalBadgeColor = (status: string) => {
+              if (status === '完了') return 'bg-green-100 text-green-800'
+              if (status === '作業中') return 'bg-blue-100 text-blue-800'
+              if (status === '延期') return 'bg-orange-100 text-orange-800'
+              if (status === '中止') return 'bg-red-100 text-red-800'
+              if (status === '要確認') return 'bg-yellow-100 text-yellow-800'
+              return 'bg-slate-100 text-slate-600'
+            }
+
+            return (
+              <div className="flex-1 overflow-auto">
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                  {/* 曜日ヘッダー */}
+                  <div className="grid grid-cols-7 border-b border-slate-200">
+                    {['日', '月', '火', '水', '木', '金', '土'].map((w, i) => (
+                      <div key={w} className={`py-2 text-center text-xs font-semibold ${i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-slate-500'}`}>{w}</div>
+                    ))}
+                  </div>
+                  {/* 週行 */}
+                  {weeks.map((week, wi) => (
+                    <div key={wi} className="grid grid-cols-7 border-b border-slate-100" style={{ minHeight: 100 }}>
+                      {week.map((day, di) => {
+                        if (day === null) {
+                          return <div key={di} className="bg-slate-50 border-r border-slate-100 last:border-r-0" />
+                        }
+                        const dateStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                        const isToday2 = dateStr === todayStr2
+                        const isHoliday = JP_HOLIDAYS.includes(dateStr)
+                        const isSun = di === 0
+                        const isSat = di === 6
+
+                        // この日に開始・終了する工程
+                        const startTasks = monthSchedules.filter(s => s.startDate.split('T')[0] === dateStr)
+                        const endTasks = monthSchedules.filter(s => s.endDate.split('T')[0] === dateStr && s.startDate.split('T')[0] !== dateStr)
+
+                        let cellBg = 'bg-white'
+                        if (isSun || isHoliday) cellBg = 'bg-red-50'
+                        else if (isSat) cellBg = 'bg-blue-50'
+
+                        return (
+                          <div key={di} className={`${cellBg} border-r border-slate-100 last:border-r-0 p-1 relative`} style={{ minHeight: 100 }}>
+                            <div className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${isToday2 ? 'bg-blue-600 text-white' : isSun || isHoliday ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-slate-700'}`}>
+                              {day}
+                            </div>
+                            <div className="space-y-0.5">
+                              {startTasks.map(s => (
+                                <button
+                                  key={`start-${s.id}`}
+                                  onClick={() => openEdit(s)}
+                                  className={`w-full text-left text-xs px-1 py-0.5 rounded truncate ${getCalBadgeColor(s.status)}`}
+                                  title={`開始: ${s.name}`}
+                                >
+                                  ▶ {s.name}
+                                </button>
+                              ))}
+                              {endTasks.map(s => (
+                                <button
+                                  key={`end-${s.id}`}
+                                  onClick={() => openEdit(s)}
+                                  className={`w-full text-left text-xs px-1 py-0.5 rounded truncate ${getCalBadgeColor(s.status)} opacity-80`}
+                                  title={`終了: ${s.name}`}
+                                >
+                                  ■ {s.name}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })()
         ) : (
           /* ---- GANTT VIEW ---- */
           <div
@@ -1496,6 +1883,152 @@ export default function SchedulePage() {
           </div>
         )}
       </div>
+
+      {/* Template Modal */}
+      {showTemplateModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+              <h3 className="text-base font-semibold text-slate-900">テンプレートから工程を追加</h3>
+              <button onClick={() => setShowTemplateModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-slate-200 px-5">
+              <button
+                onClick={() => setTemplateTab('template')}
+                className={`py-2.5 px-3 text-sm font-medium border-b-2 -mb-px transition-colors ${templateTab === 'template' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              >
+                テンプレートから
+              </button>
+              <button
+                onClick={() => setTemplateTab('project')}
+                className={`py-2.5 px-3 text-sm font-medium border-b-2 -mb-px transition-colors ${templateTab === 'project' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              >
+                他案件から複製
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+              {templateTab === 'template' ? (
+                <div className="space-y-3">
+                  {scheduleTemplates.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400 text-sm">
+                      <Layers className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                      工程テンプレートが登録されていません。<br />
+                      設定 &gt; 工程マスタ から登録できます。
+                    </div>
+                  ) : (
+                    scheduleTemplates.map((tmpl) => (
+                      <label
+                        key={tmpl.id}
+                        className={`block border rounded-lg p-3 cursor-pointer transition-colors ${selectedTemplateId === tmpl.id ? 'border-blue-500 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}
+                      >
+                        <input
+                          type="radio"
+                          name="template"
+                          value={tmpl.id}
+                          checked={selectedTemplateId === tmpl.id}
+                          onChange={() => setSelectedTemplateId(tmpl.id)}
+                          className="sr-only"
+                        />
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-sm text-slate-900">{tmpl.name}</span>
+                          <span className="text-xs text-slate-400">{tmpl.scheduleTemplates.length}工程</span>
+                        </div>
+                        {tmpl.workType && <span className="text-xs text-slate-500">{tmpl.workType}</span>}
+                        {tmpl.scheduleTemplates.length > 0 && (
+                          <ul className="mt-2 space-y-0.5">
+                            {tmpl.scheduleTemplates.slice(0, 5).map((st) => (
+                              <li key={st.id} className="text-xs text-slate-500 flex gap-2">
+                                <span className="text-slate-400 w-16 shrink-0">+{st.offsetDays}日目</span>
+                                <span className="truncate">{st.name}</span>
+                                <span className="text-slate-400 shrink-0">{st.durationDays}日</span>
+                              </li>
+                            ))}
+                            {tmpl.scheduleTemplates.length > 5 && (
+                              <li className="text-xs text-slate-400">他 {tmpl.scheduleTemplates.length - 5} 件...</li>
+                            )}
+                          </ul>
+                        )}
+                      </label>
+                    ))
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">複製元の案件</label>
+                    <select
+                      value={templateSourceProjectId}
+                      onChange={(e) => handleTemplateProjectChange(e.target.value)}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">案件を選択...</option>
+                      {projects.filter(p => p.id !== filterProjectId).map(p => (
+                        <option key={p.id} value={p.id}>{p.projectNumber} - {p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {templateSourceProjectId && (
+                    <div>
+                      {templateSourceSchedules.length === 0 ? (
+                        <p className="text-sm text-slate-400">この案件に工程はありません</p>
+                      ) : (
+                        <>
+                          <p className="text-xs text-slate-500 mb-2">{templateSourceSchedules.length}件の工程が複製されます（日付は今日起算でオフセット）</p>
+                          <ul className="border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-48 overflow-y-auto">
+                            {templateSourceSchedules.map(s => (
+                              <li key={s.id} className="px-3 py-2 text-xs flex items-center gap-2">
+                                <span className="text-slate-400 w-20 shrink-0">{s.startDate.split('T')[0]}</span>
+                                <span className="flex-1 truncate text-slate-700">{s.name}</span>
+                                <span className="text-slate-400 shrink-0">{s.category || ''}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-4 border-t border-slate-200 flex items-center justify-between">
+              <div>
+                {!filterProjectId && (
+                  <p className="text-xs text-amber-600">※ 追加先の案件を右上のフィルタで選択してください</p>
+                )}
+                {templateMessage && (
+                  <p className="text-xs text-green-600">{templateMessage}</p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowTemplateModal(false)}
+                  className="px-4 py-2 text-sm text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50"
+                >
+                  キャンセル
+                </button>
+                <button
+                  onClick={handleAddFromTemplate}
+                  disabled={
+                    templateAdding ||
+                    !filterProjectId ||
+                    (templateTab === 'template' && !selectedTemplateId) ||
+                    (templateTab === 'project' && (!templateSourceProjectId || templateSourceSchedules.length === 0))
+                  }
+                  className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg font-medium"
+                >
+                  {templateAdding ? '追加中...' : 'この工程セットを追加'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Copy Modal */}
       {showCopyModal && (

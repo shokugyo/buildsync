@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
   await logAudit({
     userId: (session.user as any).id,
     userName: (session.user as any).name || '',
-    action: 'UPLOAD',
+    action: 'drawing_upload',
     target: '図面',
     targetId: drawing.id,
     detail: `${name} v${newVersion}`,

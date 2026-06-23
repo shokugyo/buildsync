@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { notifyProjectMembers } from '@/lib/notify'
 import { dispatchWebhook } from '@/lib/webhook'
+import { logAudit } from '@/lib/audit'
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
@@ -72,6 +73,17 @@ export async function POST(req: NextRequest) {
   })
 
   const projectId = photo.projectId
+
+  await logAudit({
+    userId: (session.user as any).id,
+    userName: (session.user as any).name || '',
+    action: 'photo_upload',
+    target: '写真',
+    targetId: photo.id,
+    detail: photo.project?.name ?? '',
+    companyId: (session.user as any).companyId,
+  })
+
   await notifyProjectMembers({
     projectId,
     excludeUserId: (session.user as any).id,

@@ -19,7 +19,7 @@ const TABS = [
   { key: 'dashboard', label: 'ダッシュボード', icon: BarChart2 },
   { key: 'schedule', label: '工程', icon: Calendar },
   { key: 'photos', label: '写真', icon: Camera },
-  { key: 'documents', label: '資材', icon: Folder },
+  { key: 'documents', label: '資料（書類管理）', icon: Folder },
   { key: 'work-reports', label: '報告', icon: ClipboardCheck },
   { key: 'members', label: 'メンバー', icon: Users },
   { key: 'chat', label: 'チャット', icon: MessageSquare },
@@ -264,6 +264,10 @@ export default function ProjectDetailPage() {
   const [docViewMode, setDocViewMode] = useState<'folder' | 'list'>('folder')
   const [docSort, setDocSort] = useState<'newest' | 'oldest'>('newest')
   const [docSearch, setDocSearch] = useState('')
+  const [docCategoryFilter, setDocCategoryFilter] = useState('all')
+  const [showDocUploadModal, setShowDocUploadModal] = useState(false)
+  const [docUploadForm, setDocUploadForm] = useState({ name: '', fileUrl: '', fileName: '', category: 'その他' })
+  const [docUploadSaving, setDocUploadSaving] = useState(false)
 
   // Members tab state
   const [memberCompanyFilter, setMemberCompanyFilter] = useState('')
@@ -1199,8 +1203,25 @@ export default function ProjectDetailPage() {
 
             {/* Documents Tab */}
             {activeTab === 'documents' && (() => {
+              const DOC_CATEGORIES = [
+                { value: 'all', label: 'すべて' },
+                { value: '契約書', label: '契約書' },
+                { value: '仕様書', label: '仕様書' },
+                { value: '施工資料', label: '施工資料' },
+                { value: '安全書類', label: '安全書類' },
+                { value: '検査書類', label: '検査書類' },
+                { value: 'その他', label: 'その他' },
+              ]
+
               const filteredDocs = documents
-                .filter((doc: any) => !docSearch || doc.name.includes(docSearch) || (doc.description || '').includes(docSearch))
+                .filter((doc: any) => {
+                  if (docCategoryFilter !== 'all') {
+                    const docCat = doc.category || 'その他'
+                    if (docCat !== docCategoryFilter) return false
+                  }
+                  if (docSearch && !doc.name.includes(docSearch) && !(doc.description || '').includes(docSearch)) return false
+                  return true
+                })
                 .sort((a: any, b: any) => {
                   const da = new Date(a.createdAt).getTime()
                   const db = new Date(b.createdAt).getTime()
@@ -1214,18 +1235,81 @@ export default function ProjectDetailPage() {
                 grouped[cat].push(doc)
               })
 
+              const handleDocCategoryUpdate = async (docId: string, newCategory: string) => {
+                const res = await fetch(`/api/documents/${docId}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ category: newCategory }),
+                })
+                if (res.ok) {
+                  const updated = await res.json()
+                  setDocuments(prev => prev.map((d: any) => d.id === docId ? { ...d, category: updated.category ?? newCategory } : d))
+                }
+              }
+
               return (
                 <div>
-                  {/* Header link */}
+                  {/* Header */}
                   <div className="flex items-center justify-between mb-3">
-                    <button className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline">
-                      <Folder className="w-3.5 h-3.5" />資料を管理する
+                    <div className="flex items-center gap-2">
+                      <Folder className="w-4 h-4 text-amber-500" />
+                      <h3 className="text-sm font-semibold text-slate-700">資料（書類管理）</h3>
+                      <span className="text-xs text-slate-400">{documents.length}件</span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setDocUploadForm({ name: '', fileUrl: '', fileName: '', category: docCategoryFilter !== 'all' ? docCategoryFilter : 'その他' })
+                        setShowDocUploadModal(true)
+                      }}
+                      className="flex items-center gap-1.5 text-sm bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700"
+                    >
+                      <Plus className="w-4 h-4" /> 資料を追加
                     </button>
                   </div>
 
+                  {/* Category filter tabs */}
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {DOC_CATEGORIES.map(cat => (
+                      <button
+                        key={cat.value}
+                        onClick={() => setDocCategoryFilter(cat.value)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                          docCategoryFilter === cat.value
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {cat.label}
+                        {cat.value !== 'all' && (
+                          <span className="ml-1 text-[10px] opacity-70">
+                            ({documents.filter((d: any) => (d.category || 'その他') === cat.value).length})
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Category-specific links */}
+                  {docCategoryFilter === '安全書類' && (
+                    <div className="mb-3 px-3 py-2 bg-orange-50 border border-orange-200 rounded-lg flex items-center gap-2 text-xs">
+                      <AlertTriangle className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
+                      <span className="text-orange-700">安全書類の一括管理は</span>
+                      <a href={`/safety-docs?projectId=${params.id}`} className="text-orange-600 underline hover:text-orange-800 font-medium">安全書類管理ページ</a>
+                      <span className="text-orange-700">でも確認できます</span>
+                    </div>
+                  )}
+                  {docCategoryFilter === '契約書' && (
+                    <div className="mb-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2 text-xs">
+                      <FileText className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                      <span className="text-blue-700">契約書の一括管理は</span>
+                      <a href={`/contracts?projectId=${params.id}`} className="text-blue-600 underline hover:text-blue-800 font-medium">契約管理ページ</a>
+                      <span className="text-blue-700">でも確認できます</span>
+                    </div>
+                  )}
+
                   {/* Toolbar */}
                   <div className="flex flex-wrap items-center gap-2 mb-3">
-                    <span className="text-xs text-slate-500">表示方法：</span>
+                    <span className="text-xs text-slate-500">表示：</span>
                     <div className="flex border border-slate-200 rounded overflow-hidden text-xs">
                       {(['folder', 'list'] as const).map((mode) => (
                         <button
@@ -1255,37 +1339,41 @@ export default function ProjectDetailPage() {
                     <button className="text-xs bg-slate-700 text-white px-3 py-1.5 rounded hover:bg-slate-800">検索</button>
                   </div>
 
-                  {/* Breadcrumb */}
-                  <div className="flex items-center gap-2 mb-3 text-xs text-slate-500">
-                    <span className="font-medium text-slate-700">資料トップ</span>
-                    <span>/</span>
-                    <button className="text-blue-500 hover:underline">全て選択</button>
-                    <button className="text-blue-500 hover:underline">主工種別</button>
-                  </div>
-
                   {filteredDocs.length === 0 ? (
-                    <p className="text-slate-500 text-sm">資料がありません</p>
+                    <div className="text-center py-8">
+                      <Folder className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                      <p className="text-slate-500 text-sm">
+                        {docCategoryFilter !== 'all'
+                          ? `「${DOC_CATEGORIES.find(c => c.value === docCategoryFilter)?.label}」の資料がありません`
+                          : '資料がありません'}
+                      </p>
+                      <button
+                        onClick={() => {
+                          setDocUploadForm({ name: '', fileUrl: '', fileName: '', category: docCategoryFilter !== 'all' ? docCategoryFilter : 'その他' })
+                          setShowDocUploadModal(true)
+                        }}
+                        className="mt-3 text-sm text-blue-600 hover:underline"
+                      >資料を追加する</button>
+                    </div>
                   ) : docViewMode === 'folder' ? (
                     <div className="border border-slate-200 rounded-lg overflow-hidden">
                       {/* Folder header row */}
-                      <div className="grid grid-cols-[1fr_80px_80px_100px_120px] gap-2 px-3 py-2 bg-slate-50 border-b border-slate-200 text-xs font-medium text-slate-500">
-                        <div className="flex items-center gap-2">
-                          <span>資料名称</span>
-                        </div>
+                      <div className="grid grid-cols-[1fr_80px_80px_110px_120px_140px] gap-2 px-3 py-2 bg-slate-50 border-b border-slate-200 text-xs font-medium text-slate-500">
+                        <span>資料名称</span>
                         <span className="text-center">項目数</span>
-                        <span className="text-center">閲覧人数</span>
+                        <span className="text-center">閲覧回数</span>
                         <span className="text-center">公開設定</span>
                         <span>作成日時</span>
+                        <span>カテゴリ</span>
                       </div>
                       {Object.entries(grouped).map(([category, docs]) => {
                         const isExpanded = docFolderExpanded[category] !== false
-                        const publicDocs = docs.filter((d: any) => d.isPublic)
                         return (
                           <div key={category}>
                             {/* Folder row */}
                             <button
                               onClick={() => setDocFolderExpanded(prev => ({ ...prev, [category]: !isExpanded }))}
-                              className="w-full grid grid-cols-[1fr_80px_80px_100px_120px] gap-2 px-3 py-2.5 bg-white hover:bg-slate-50 border-b border-slate-100 transition-colors text-left items-center"
+                              className="w-full grid grid-cols-[1fr_80px_80px_110px_120px_140px] gap-2 px-3 py-2.5 bg-white hover:bg-slate-50 border-b border-slate-100 transition-colors text-left items-center"
                             >
                               <div className="flex items-center gap-2">
                                 {isExpanded
@@ -1298,10 +1386,11 @@ export default function ProjectDetailPage() {
                               <span className="text-xs text-slate-500 text-center">-</span>
                               <span className="text-xs text-slate-500 text-center">-</span>
                               <span className="text-xs text-slate-400">{new Date(docs[0]?.createdAt || Date.now()).toLocaleDateString('ja-JP')}</span>
+                              <span />
                             </button>
                             {/* Doc rows */}
                             {isExpanded && docs.map((doc: any) => (
-                              <div key={doc.id} className="grid grid-cols-[1fr_80px_80px_100px_120px] gap-2 pl-8 pr-3 py-2 border-b border-slate-50 hover:bg-slate-50 items-center">
+                              <div key={doc.id} className="grid grid-cols-[1fr_80px_80px_110px_120px_140px] gap-2 pl-8 pr-3 py-2 border-b border-slate-50 hover:bg-slate-50 items-center">
                                 <div className="flex items-center gap-2 min-w-0">
                                   <input type="checkbox" className="flex-shrink-0 w-3.5 h-3.5 rounded border-slate-300" />
                                   <File className="w-4 h-4 text-blue-400 flex-shrink-0" />
@@ -1329,6 +1418,17 @@ export default function ProjectDetailPage() {
                                   </button>
                                 </div>
                                 <span className="text-xs text-slate-500">{new Date(doc.createdAt).toLocaleDateString('ja-JP')}</span>
+                                <div onClick={e => e.stopPropagation()}>
+                                  <select
+                                    value={doc.category || 'その他'}
+                                    onChange={e => handleDocCategoryUpdate(doc.id, e.target.value)}
+                                    className="text-xs border border-slate-200 rounded px-1.5 py-0.5 text-slate-600 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 w-full"
+                                  >
+                                    {DOC_CATEGORIES.filter(c => c.value !== 'all').map(c => (
+                                      <option key={c.value} value={c.value}>{c.label}</option>
+                                    ))}
+                                  </select>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -1338,16 +1438,17 @@ export default function ProjectDetailPage() {
                   ) : (
                     /* List view */
                     <div className="border border-slate-200 rounded-lg overflow-hidden">
-                      <div className="grid grid-cols-[1fr_80px_80px_100px_120px_160px] gap-2 px-3 py-2 bg-slate-50 border-b border-slate-200 text-xs font-medium text-slate-500">
+                      <div className="grid grid-cols-[1fr_80px_80px_110px_120px_140px_160px] gap-2 px-3 py-2 bg-slate-50 border-b border-slate-200 text-xs font-medium text-slate-500">
                         <span>資料名</span>
                         <span className="text-center">閲覧回数</span>
                         <span className="text-center">閲覧人数</span>
                         <span className="text-center">公開設定</span>
                         <span>作成日時</span>
+                        <span>カテゴリ</span>
                         <span>操作</span>
                       </div>
                       {filteredDocs.map((doc: any) => (
-                        <div key={doc.id} className="grid grid-cols-[1fr_80px_80px_100px_120px_160px] gap-2 px-3 py-2.5 border-b border-slate-50 hover:bg-slate-50 items-center">
+                        <div key={doc.id} className="grid grid-cols-[1fr_80px_80px_110px_120px_140px_160px] gap-2 px-3 py-2.5 border-b border-slate-50 hover:bg-slate-50 items-center">
                           <div className="flex items-center gap-2 min-w-0">
                             <input type="checkbox" className="flex-shrink-0 w-3.5 h-3.5 rounded border-slate-300" />
                             <File className="w-4 h-4 text-blue-400 flex-shrink-0" />
@@ -1370,26 +1471,130 @@ export default function ProjectDetailPage() {
                               }}
                               className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors ${doc.isPublic ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
                             >
-                              {doc.isPublic ? <span className="flex items-center gap-1"><Globe className="w-3 h-3" />公開</span> : <span className="flex items-center gap-1"><Lock className="w-3 h-3" />-</span>}
+                              {doc.isPublic ? <span className="flex items-center gap-1"><Globe className="w-3 h-3" />公開</span> : <span className="flex items-center gap-1"><Lock className="w-3 h-3" />非公開</span>}
                             </button>
                           </div>
                           <span className="text-xs text-slate-500">{new Date(doc.createdAt).toLocaleDateString('ja-JP')}</span>
+                          <select
+                            value={doc.category || 'その他'}
+                            onChange={e => handleDocCategoryUpdate(doc.id, e.target.value)}
+                            className="text-xs border border-slate-200 rounded px-1.5 py-0.5 text-slate-600 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          >
+                            {DOC_CATEGORIES.filter(c => c.value !== 'all').map(c => (
+                              <option key={c.value} value={c.value}>{c.label}</option>
+                            ))}
+                          </select>
                           <div className="flex items-center gap-1">
                             <button
                               onClick={async () => {
-                                window.open(doc.filePath, '_blank')
+                                window.open(doc.filePath || doc.fileUrl, '_blank')
                                 await fetch(`/api/documents/${doc.id}/view`, { method: 'POST' }).catch(() => {})
                               }}
                               className="text-xs text-blue-600 hover:text-blue-700 px-2 py-1 border border-blue-200 rounded hover:bg-blue-50 whitespace-nowrap"
                             >
-                              <Eye className="w-3 h-3 inline mr-0.5" />ブラウザで見る
+                              <Eye className="w-3 h-3 inline mr-0.5" />見る
                             </button>
-                            <a href={doc.filePath} download className="text-xs text-slate-600 hover:text-slate-700 px-2 py-1 border border-slate-200 rounded hover:bg-slate-50">
+                            <a href={doc.filePath || doc.fileUrl} download className="text-xs text-slate-600 hover:text-slate-700 px-2 py-1 border border-slate-200 rounded hover:bg-slate-50">
                               <Download className="w-3 h-3" />
                             </a>
                           </div>
                         </div>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Document upload modal */}
+                  {showDocUploadModal && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                      <div className="bg-white rounded-xl w-full max-w-md shadow-xl">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+                          <h2 className="font-semibold text-slate-900">資料を追加</h2>
+                          <button onClick={() => setShowDocUploadModal(false)} className="text-slate-400 hover:text-slate-600">
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                        <form
+                          onSubmit={async (e) => {
+                            e.preventDefault()
+                            setDocUploadSaving(true)
+                            try {
+                              const res = await fetch('/api/documents', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  projectId: params.id,
+                                  name: docUploadForm.name,
+                                  fileName: docUploadForm.fileName || docUploadForm.name,
+                                  fileUrl: docUploadForm.fileUrl,
+                                  category: docUploadForm.category,
+                                }),
+                              })
+                              if (res.ok) {
+                                const created = await res.json()
+                                setDocuments(prev => [created, ...prev])
+                                setShowDocUploadModal(false)
+                              }
+                            } finally {
+                              setDocUploadSaving(false)
+                            }
+                          }}
+                        >
+                          <div className="px-6 py-4 space-y-4">
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">資料名 <span className="text-red-500">*</span></label>
+                              <input
+                                required
+                                type="text"
+                                value={docUploadForm.name}
+                                onChange={e => setDocUploadForm(f => ({ ...f, name: e.target.value }))}
+                                placeholder="例：工事仕様書"
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">カテゴリ <span className="text-red-500">*</span></label>
+                              <select
+                                value={docUploadForm.category}
+                                onChange={e => setDocUploadForm(f => ({ ...f, category: e.target.value }))}
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              >
+                                {DOC_CATEGORIES.filter(c => c.value !== 'all').map(c => (
+                                  <option key={c.value} value={c.value}>{c.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">ファイル名</label>
+                              <input
+                                type="text"
+                                value={docUploadForm.fileName}
+                                onChange={e => setDocUploadForm(f => ({ ...f, fileName: e.target.value }))}
+                                placeholder="例：spec_v1.pdf"
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-slate-700 mb-1">ファイルURL <span className="text-red-500">*</span></label>
+                              <input
+                                required
+                                type="url"
+                                value={docUploadForm.fileUrl}
+                                onChange={e => setDocUploadForm(f => ({ ...f, fileUrl: e.target.value }))}
+                                placeholder="https://..."
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                          </div>
+                          <div className="px-6 py-4 border-t border-slate-200 flex gap-3 justify-end">
+                            <button type="button" onClick={() => setShowDocUploadModal(false)}
+                              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium">キャンセル</button>
+                            <button type="submit" disabled={docUploadSaving}
+                              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg text-sm font-medium">
+                              {docUploadSaving ? '追加中...' : '追加する'}
+                            </button>
+                          </div>
+                        </form>
+                      </div>
                     </div>
                   )}
                 </div>

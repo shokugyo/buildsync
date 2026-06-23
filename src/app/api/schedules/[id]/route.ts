@@ -38,17 +38,14 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     })
 
     // N-003: 工程変更通知
-    const dateChanged =
-      (startDate !== undefined && existing?.startDate?.toISOString().slice(0, 10) !== startDate) ||
-      (endDate !== undefined && existing?.endDate?.toISOString().slice(0, 10) !== endDate)
-    if (existing && dateChanged) {
+    if (existing) {
       await notifyProjectMembers({
-        projectId: existing.projectId,
+        projectId: schedule.projectId,
         excludeUserId: (session.user as any).id,
-        title: '工程が変更されました',
-        content: `「${existing.name}」の工程が変更されました`,
-        type: 'schedule',
-        link: `/projects/${existing.projectId}`,
+        title: '工程変更通知',
+        content: `${schedule.project.name} の工程「${schedule.name}」が更新されました`,
+        type: 'schedule_change',
+        link: `/schedule?projectId=${schedule.projectId}`,
       })
     }
 

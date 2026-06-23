@@ -5,6 +5,9 @@ import { X } from 'lucide-react'
 
 export interface BlackboardData {
   projectName: string
+  workType: string
+  constructionContent: string
+  constructionCompany: string
   date: string
   location: string
   photographer: string
@@ -59,6 +62,9 @@ export default function Blackboard({ data: initialData, onSave, onClose }: Black
     // Rows
     const rows: { label: string; value: string }[] = [
       { label: '案件名', value: form.projectName },
+      { label: '工　種', value: form.workType },
+      { label: '施工内容', value: form.constructionContent },
+      { label: '施工会社', value: form.constructionCompany },
       { label: '日　時', value: form.date },
       { label: '撮影場所', value: form.location },
       { label: '撮影者', value: form.photographer },
@@ -140,6 +146,38 @@ export default function Blackboard({ data: initialData, onSave, onClose }: Black
                 value={form.projectName}
                 onChange={(e) => setForm({ ...form, projectName: e.target.value })}
                 placeholder="例: ○○ビル新築工事"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">工種</label>
+                <input
+                  type="text"
+                  value={form.workType}
+                  onChange={(e) => setForm({ ...form, workType: e.target.value })}
+                  placeholder="例: 基礎工事"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">施工会社</label>
+                <input
+                  type="text"
+                  value={form.constructionCompany}
+                  onChange={(e) => setForm({ ...form, constructionCompany: e.target.value })}
+                  placeholder="例: ○○建設株式会社"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">施工内容</label>
+              <input
+                type="text"
+                value={form.constructionContent}
+                onChange={(e) => setForm({ ...form, constructionContent: e.target.value })}
+                placeholder="例: 配筋検査 D13@200"
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
               />
             </div>

@@ -6,7 +6,7 @@ import Link from 'next/link'
 import Header from '@/components/Header'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import {
-  ArrowLeft, MapPin, History, CheckCircle, Circle, X, Plus, ExternalLink, ZoomIn, ZoomOut, RotateCcw, Box
+  ArrowLeft, MapPin, History, CheckCircle, Circle, X, Plus, ExternalLink, ZoomIn, ZoomOut, RotateCcw, Box, Share2, Users, Globe
 } from 'lucide-react'
 
 const BIM_EXTENSIONS = ['.ifc', '.rvt', '.dwg', '.dxf', '.nwd', '.fbx']
@@ -37,11 +37,18 @@ interface Drawing {
   fileType?: string | null
   isBim?: boolean
   description?: string | null
+  sharedWith?: string | null
   createdAt: string
   updatedAt: string
   uploader: { id: true; name: string }
   project: { id: string; name: string; projectNumber: string }
   pins: DrawingPin[]
+}
+
+interface User {
+  id: string
+  name: string
+  email: string
 }
 
 export default function DrawingViewerPage() {
@@ -61,6 +68,12 @@ export default function DrawingViewerPage() {
   const imgRef = useRef<HTMLImageElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
+  // 共有設定
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [allUsers, setAllUsers] = useState<User[]>([])
+  const [shareSelection, setShareSelection] = useState<string[] | null>(null) // null = 全員公開
+  const [savingShare, setSavingShare] = useState(false)
+
   useEffect(() => {
     fetch(`/api/drawings/${drawingId}`)
       .then(r => r.json())
@@ -68,8 +81,49 @@ export default function DrawingViewerPage() {
         setDrawing(data)
         setPins(data.pins || [])
         setLoading(false)
+        // 共有設定の初期化
+        if (data.sharedWith) {
+          try { setShareSelection(JSON.parse(data.sharedWith)) } catch { setShareSelection(null) }
+        } else {
+          setShareSelection(null)
+        }
       })
   }, [drawingId])
+
+  const openShareModal = async () => {
+    if (allUsers.length === 0) {
+      const res = await fetch('/api/users')
+      const data = await res.json()
+      setAllUsers(Array.isArray(data) ? data : [])
+    }
+    setShowShareModal(true)
+  }
+
+  const handleSaveShare = async () => {
+    if (!drawing) return
+    setSavingShare(true)
+    try {
+      const res = await fetch(`/api/drawings/${drawing.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sharedWith: shareSelection }),
+      })
+      if (res.ok) {
+        const updated = await res.json()
+        setDrawing(prev => prev ? { ...prev, sharedWith: updated.sharedWith } : prev)
+        setShowShareModal(false)
+      }
+    } finally {
+      setSavingShare(false)
+    }
+  }
+
+  const toggleShareUser = (userId: string) => {
+    setShareSelection(prev => {
+      if (prev === null) return [userId]
+      return prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    })
+  }
 
   const handleImageClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!addingPin || !imgRef.current) return
@@ -142,6 +196,20 @@ export default function DrawingViewerPage() {
               <History className="w-4 h-4" />
               バージョン履歴
             </Link>
+            <button
+              onClick={openShareModal}
+              className="flex items-center gap-1.5 border border-slate-300 text-slate-700 px-3 py-1.5 rounded-lg text-sm hover:bg-slate-50"
+            >
+              <Share2 className="w-4 h-4" />
+              共有設定
+              {drawing.sharedWith ? (
+                <span className="ml-1 bg-blue-100 text-blue-700 text-xs px-1.5 py-0.5 rounded-full font-medium">
+                  {(() => { try { return JSON.parse(drawing.sharedWith).length } catch { return 0 } })()}人
+                </span>
+              ) : (
+                <span className="ml-1 bg-slate-100 text-slate-500 text-xs px-1.5 py-0.5 rounded-full">全員</span>
+              )}
+            </button>
             <a
               href={drawing.filePath}
               target="_blank"
@@ -424,6 +492,94 @@ export default function DrawingViewerPage() {
           </div>
         </div>
       </div>
+
+      {/* 共有設定モーダル */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-slate-900 flex items-center gap-2">
+                <Share2 className="w-4 h-4" /> 共有設定
+              </h2>
+              <button onClick={() => setShowShareModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 全員公開オプション */}
+            <label className="flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer mb-3 transition-colors hover:bg-slate-50
+              border-blue-500 bg-blue-50">
+              <input
+                type="checkbox"
+                checked={shareSelection === null}
+                onChange={() => setShareSelection(shareSelection === null ? [] : null)}
+                className="w-4 h-4 text-blue-600"
+              />
+              <Globe className="w-4 h-4 text-blue-600" />
+              <div>
+                <p className="text-sm font-medium text-slate-900">全員に公開</p>
+                <p className="text-xs text-slate-500">社内の全ユーザーが閲覧できます</p>
+              </div>
+            </label>
+
+            {shareSelection !== null && (
+              <>
+                <div className="flex items-center gap-2 mb-2">
+                  <Users className="w-4 h-4 text-slate-500" />
+                  <p className="text-sm font-medium text-slate-700">閲覧を許可するユーザー</p>
+                  <span className="ml-auto text-xs text-slate-400">{shareSelection.length}人選択中</span>
+                </div>
+                <div className="overflow-y-auto flex-1 space-y-1 border border-slate-200 rounded-lg p-2">
+                  {allUsers.length === 0 ? (
+                    <p className="text-sm text-slate-400 text-center py-4">ユーザーを読み込み中...</p>
+                  ) : (
+                    allUsers.map(user => {
+                      const checked = shareSelection.includes(user.id)
+                      return (
+                        <label
+                          key={user.id}
+                          className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors hover:bg-slate-50 ${checked ? 'bg-blue-50' : ''}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleShareUser(user.id)}
+                            className="w-4 h-4 text-blue-600"
+                          />
+                          <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium text-slate-600">
+                            {user.name.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-slate-900">{user.name}</p>
+                            <p className="text-xs text-slate-400">{user.email}</p>
+                          </div>
+                        </label>
+                      )
+                    })
+                  )}
+                </div>
+              </>
+            )}
+
+            <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setShowShareModal(false)}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={handleSaveShare}
+                disabled={savingShare}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {savingShare ? '保存中...' : '保存する'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 
 function formatDate(d: any) {
@@ -29,6 +29,9 @@ export default function PortalPage() {
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [sendError, setSendError] = useState('')
+  const [lightboxPhoto, setLightboxPhoto] = useState<{ src: string; caption: string } | null>(null)
+
+  const closeLightbox = useCallback(() => setLightboxPhoto(null), [])
 
   useEffect(() => {
     fetch(`/api/portal/${token}`)

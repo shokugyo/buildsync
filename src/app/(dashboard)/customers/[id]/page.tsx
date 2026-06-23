@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/Header'
 import { formatDate, formatCurrency, getStatusColor } from '@/lib/utils'
-import { ArrowLeft, Mail, Phone, MapPin, Edit2, Trash2, Building2, X, Save, TrendingUp, Plus, ClipboardList, FileText, MessageSquare, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Mail, Phone, MapPin, Edit2, Trash2, Building2, X, Save, TrendingUp, Plus, ClipboardList, FileText, MessageSquare, ExternalLink, ScrollText } from 'lucide-react'
 
 interface AfterServiceRecord {
   id: string
@@ -17,7 +17,7 @@ interface AfterServiceRecord {
   project: { id: string; name: string; projectNumber: string } | null
 }
 
-type CustomerTab = 'projects' | 'leads' | 'after-service' | 'invoices' | 'inquiries' | 'portal'
+type CustomerTab = 'projects' | 'leads' | 'after-service' | 'invoices' | 'inquiries' | 'portal' | 'contracts'
 
 export default function CustomerDetailPage() {
   const params = useParams()
@@ -28,6 +28,10 @@ export default function CustomerDetailPage() {
   const [editForm, setEditForm] = useState({ name: '', type: '法人', address: '', phone: '', email: '' })
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState<CustomerTab>('projects')
+
+  // Contracts state
+  const [contracts, setContracts] = useState<any[]>([])
+  const [contractsLoading, setContractsLoading] = useState(false)
 
   // Invoices state
   const [invoices, setInvoices] = useState<any[]>([])
@@ -80,8 +84,21 @@ export default function CustomerDetailPage() {
       fetchInvoices()
     } else if (activeTab === 'inquiries') {
       fetchInquiries()
+    } else if (activeTab === 'contracts') {
+      fetchContracts()
     }
   }, [activeTab, params.id])
+
+  const fetchContracts = async () => {
+    setContractsLoading(true)
+    try {
+      const res = await fetch(`/api/customers/${params.id}/contracts`)
+      const data = await res.json()
+      setContracts(Array.isArray(data) ? data : [])
+    } finally {
+      setContractsLoading(false)
+    }
+  }
 
   const fetchInvoices = async () => {
     setInvoicesLoading(true)
@@ -354,6 +371,13 @@ export default function CustomerDetailPage() {
             問い合わせ
           </button>
           <button
+            onClick={() => setActiveTab('contracts')}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'contracts' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <ScrollText className="w-4 h-4" />
+            契約履歴
+          </button>
+          <button
             onClick={() => setActiveTab('portal')}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'portal' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
           >
@@ -620,6 +644,71 @@ export default function CustomerDetailPage() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Contracts tab */}
+        {activeTab === 'contracts' && (
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-2">
+              <ScrollText className="w-4 h-4 text-slate-500" />
+              <h3 className="font-semibold text-slate-900">契約履歴</h3>
+              <span className="ml-1 text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{contracts.length}件</span>
+            </div>
+            {contractsLoading ? (
+              <div className="p-8 text-center text-slate-500 text-sm">読み込み中...</div>
+            ) : contracts.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 text-sm">契約データがありません</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase">契約番号</th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase">件名</th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase">案件</th>
+                      <th className="px-5 py-3 text-right text-xs font-medium text-slate-500 uppercase">契約金額</th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase">契約日</th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase">工期</th>
+                      <th className="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase">ステータス</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {contracts.map((contract: any) => (
+                      <tr key={contract.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-5 py-3 text-slate-500 font-mono text-xs">{contract.contractNumber}</td>
+                        <td className="px-5 py-3 font-medium text-slate-900">{contract.title}</td>
+                        <td className="px-5 py-3 text-slate-500 text-xs">
+                          {contract.project ? (
+                            <Link href={`/projects/${contract.project.id}`} className="text-blue-600 hover:underline">
+                              {contract.project.projectNumber} {contract.project.name}
+                            </Link>
+                          ) : '—'}
+                        </td>
+                        <td className="px-5 py-3 text-right text-slate-800 font-medium">
+                          {contract.amount != null ? formatCurrency(contract.amount) : '—'}
+                        </td>
+                        <td className="px-5 py-3 text-slate-500">{contract.signedAt ? formatDate(contract.signedAt) : '—'}</td>
+                        <td className="px-5 py-3 text-slate-500 text-xs">
+                          {contract.startDate ? formatDate(contract.startDate) : '—'}
+                          {contract.endDate ? ` 〜 ${formatDate(contract.endDate)}` : ''}
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            contract.status === '締結済' ? 'bg-green-100 text-green-700' :
+                            contract.status === '作成中' ? 'bg-slate-100 text-slate-600' :
+                            contract.status === '承認待ち' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-slate-100 text-slate-600'
+                          }`}>
+                            {contract.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

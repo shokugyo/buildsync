@@ -3,20 +3,34 @@ import { prisma } from '@/lib/prisma'
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const { qrData, type } = body
+  const { qrData, type, workerId } = body
 
-  if (!qrData || !type) {
-    return NextResponse.json({ error: 'qrData と type は必須です' }, { status: 400 })
-  }
   if (type !== 'in' && type !== 'out') {
     return NextResponse.json({ error: 'type は "in" または "out" である必要があります' }, { status: 400 })
   }
 
-  // Parse BUILDSYNC:userId:projectId format
-  const parts = String(qrData).trim().split(':')
-  if (parts.length !== 3 || parts[0] !== 'BUILDSYNC') {
-    return NextResponse.json({ error: 'QRコードの形式が正しくありません（BUILDSYNC:userId:projectId）' }, { status: 400 })
+  // ---- WorkerRoster ID 経由のチェックイン ----
+  if (workerId) {
+    return handleWorkerRosterCheckin(workerId, type)
   }
+
+  // ---- 旧来の BUILDSYNC:userId:projectId 形式 ----
+  if (!qrData) {
+    return NextResponse.json({ error: 'qrData または workerId は必須です' }, { status: 400 })
+  }
+
+  const parts = String(qrData).trim().split(':')
+
+  // BUILDSYNC:workerId 形式 (WorkerRoster ID)
+  if (parts.length === 2 && parts[0] === 'BUILDSYNC') {
+    return handleWorkerRosterCheckin(parts[1], type)
+  }
+
+  // BUILDSYNC:userId:projectId 形式 (User ID)
+  if (parts.length !== 3 || parts[0] !== 'BUILDSYNC') {
+    return NextResponse.json({ error: 'QRコードの形式が正しくありません' }, { status: 400 })
+  }
+
   const [, userId, projectId] = parts
 
   const project = await prisma.project.findUnique({
@@ -31,17 +45,76 @@ export async function POST(req: NextRequest) {
   })
   const workerName = user?.name || userId
 
+  return processAttendance({ projectId, workerName, companyId: project.companyId, projectName: project.name, type })
+}
+
+// WorkerRoster ID からチェックイン処理
+async function handleWorkerRosterCheckin(workerId: string, type: 'in' | 'out'): Promise<NextResponse> {
+  const roster = await prisma.workerRoster.findUnique({
+    where: { id: workerId },
+    include: { project: { select: { id: true, name: true, companyId: true } } },
+  })
+  if (!roster) {
+    return NextResponse.json({ error: '作業員が見つかりません (ID: ' + workerId + ')' }, { status: 404 })
+  }
+
+  return processAttendance({
+    projectId: roster.projectId,
+    workerName: roster.workerName,
+    companyId: roster.companyId,
+    projectName: roster.project.name,
+    type,
+  })
+}
+
+async function processAttendance({
+  projectId,
+  workerName,
+  companyId,
+  projectName,
+  type,
+}: {
+  projectId: string
+  workerName: string
+  companyId: string
+  projectName: string
+  type: 'in' | 'out'
+}): Promise<NextResponse> {
   const now = new Date()
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000 - 1)
   const timeStr = now.toTimeString().slice(0, 5)
+
+  // 重複チェック: 直近5分以内に同じ workerName の同種処理がないか
+  const fiveMinAgo = new Date(now.getTime() - 5 * 60 * 1000)
+  const recentRecord = await prisma.workerAttendance.findFirst({
+    where: {
+      projectId,
+      workerName,
+      companyId,
+      workDate: { gte: todayStart, lte: todayEnd },
+      createdAt: { gte: fiveMinAgo },
+      ...(type === 'in' ? { entryTime: { not: null } } : { exitTime: { not: null } }),
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  if (recentRecord) {
+    return NextResponse.json({
+      message: '既に処理済みです（直近5分以内に同じ記録があります）',
+      attendance: recentRecord,
+      workerName,
+      projectName,
+      duplicate: true,
+    })
+  }
 
   const existing = await prisma.workerAttendance.findFirst({
     where: {
       projectId,
       workerName,
       workDate: { gte: todayStart, lte: todayEnd },
-      companyId: project.companyId,
+      companyId,
     },
   })
 
@@ -51,7 +124,8 @@ export async function POST(req: NextRequest) {
         message: '本日はすでに入場記録があります',
         attendance: existing,
         workerName,
-        projectName: project.name,
+        projectName,
+        duplicate: true,
       })
     }
 
@@ -61,7 +135,7 @@ export async function POST(req: NextRequest) {
         data: { entryTime: timeStr, checkInMethod: 'qr' },
         include: { project: { select: { name: true, projectNumber: true } } },
       })
-      return NextResponse.json({ message: '入場を記録しました', attendance: updated, workerName, projectName: project.name })
+      return NextResponse.json({ message: '入場を記録しました', attendance: updated, workerName, projectName })
     }
 
     const attendance = await prisma.workerAttendance.create({
@@ -71,33 +145,32 @@ export async function POST(req: NextRequest) {
         workDate: todayStart,
         entryTime: timeStr,
         checkInMethod: 'qr',
-        companyId: project.companyId,
+        companyId,
       },
       include: { project: { select: { name: true, projectNumber: true } } },
     })
-    return NextResponse.json({ message: '入場を記録しました', attendance, workerName, projectName: project.name }, { status: 201 })
+    return NextResponse.json({ message: '入場を記録しました', attendance, workerName, projectName }, { status: 201 })
   }
 
-  if (type === 'out') {
-    if (!existing) {
-      return NextResponse.json({ error: '本日の入場記録がありません。先に入場スキャンを行ってください。' }, { status: 400 })
-    }
-
-    let workingHours: number | null = null
-    if (existing.entryTime && timeStr) {
-      const [eh, em] = existing.entryTime.split(':').map(Number)
-      const [xh, xm] = timeStr.split(':').map(Number)
-      const diffMinutes = xh * 60 + xm - (eh * 60 + em)
-      if (diffMinutes > 0) {
-        workingHours = Math.round((diffMinutes / 60) * 100) / 100
-      }
-    }
-
-    const updated = await prisma.workerAttendance.update({
-      where: { id: existing.id },
-      data: { exitTime: timeStr, workingHours, checkOutMethod: 'qr' },
-      include: { project: { select: { name: true, projectNumber: true } } },
-    })
-    return NextResponse.json({ message: '退場を記録しました', attendance: updated, workerName, projectName: project.name })
+  // type === 'out'
+  if (!existing) {
+    return NextResponse.json({ error: '本日の入場記録がありません。先に入場スキャンを行ってください。' }, { status: 400 })
   }
+
+  let workingHours: number | null = null
+  if (existing.entryTime && timeStr) {
+    const [eh, em] = existing.entryTime.split(':').map(Number)
+    const [xh, xm] = timeStr.split(':').map(Number)
+    const diffMinutes = xh * 60 + xm - (eh * 60 + em)
+    if (diffMinutes > 0) {
+      workingHours = Math.round((diffMinutes / 60) * 100) / 100
+    }
+  }
+
+  const updated = await prisma.workerAttendance.update({
+    where: { id: existing.id },
+    data: { exitTime: timeStr, workingHours, checkOutMethod: 'qr' },
+    include: { project: { select: { name: true, projectNumber: true } } },
+  })
+  return NextResponse.json({ message: '退場を記録しました', attendance: updated, workerName, projectName })
 }

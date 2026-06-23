@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Header from '@/components/Header'
 import Link from 'next/link'
-import { Download, Save, Trash2, RefreshCw, ChevronRight, LayoutList } from 'lucide-react'
+import { Download, Save, Trash2, RefreshCw, ChevronRight, LayoutList, BarChart2 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // Data sources
@@ -48,6 +48,69 @@ const DATA_SOURCES = [
 
 type SourceId = (typeof DATA_SOURCES)[number]['id']
 
+// ---------------------------------------------------------------------------
+// KPI metrics for custom report
+// ---------------------------------------------------------------------------
+const KPI_OPTIONS = [
+  { id: 'projects_total', label: '総案件数', category: '案件' },
+  { id: 'projects_in_progress', label: '進行中案件数', category: '案件' },
+  { id: 'revenue_total', label: '売上合計', category: '財務' },
+  { id: 'cost_total', label: '原価合計', category: '財務' },
+  { id: 'gross_profit_rate', label: '粗利率（%）', category: '財務' },
+  { id: 'invoices_unpaid', label: '未払い請求額', category: '財務' },
+  { id: 'orders_pending', label: '未完了発注数', category: '発注' },
+  { id: 'defects_open', label: '未対応指摘数', category: '品質' },
+] as const
+
+type KpiId = (typeof KPI_OPTIONS)[number]['id']
+
+interface KpiResult {
+  value: number
+  label: string
+}
+
+type PeriodKey = 'this_month' | 'last_month' | 'this_quarter' | 'this_year' | 'custom'
+
+function getPeriodDates(period: PeriodKey): { from: string; to: string } {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = now.getMonth()
+  if (period === 'this_month') {
+    return {
+      from: new Date(y, m, 1).toISOString().slice(0, 10),
+      to: new Date(y, m + 1, 0).toISOString().slice(0, 10),
+    }
+  }
+  if (period === 'last_month') {
+    return {
+      from: new Date(y, m - 1, 1).toISOString().slice(0, 10),
+      to: new Date(y, m, 0).toISOString().slice(0, 10),
+    }
+  }
+  if (period === 'this_quarter') {
+    const qStart = Math.floor(m / 3) * 3
+    return {
+      from: new Date(y, qStart, 1).toISOString().slice(0, 10),
+      to: new Date(y, qStart + 3, 0).toISOString().slice(0, 10),
+    }
+  }
+  // this_year
+  return {
+    from: new Date(y, 0, 1).toISOString().slice(0, 10),
+    to: new Date(y, 11, 31).toISOString().slice(0, 10),
+  }
+}
+
+function formatMetricValue(id: string, value: number): string {
+  if (id === 'revenue_total' || id === 'cost_total' || id === 'invoices_unpaid') {
+    return `¥${value.toLocaleString('ja-JP')}`
+  }
+  if (id === 'gross_profit_rate') {
+    return `${value.toFixed(1)}%`
+  }
+  return value.toLocaleString('ja-JP')
+}
+
 interface SavedReport {
   id: string
   name: string
@@ -64,6 +127,16 @@ export default function CustomBuilderPage() {
   const [reportName, setReportName] = useState('')
   const [savedReports, setSavedReports] = useState<SavedReport[]>([])
   const [generating, setGenerating] = useState(false)
+
+  // KPI state
+  const [selectedKpis, setSelectedKpis] = useState<KpiId[]>(
+    KPI_OPTIONS.map(k => k.id)
+  )
+  const [period, setPeriod] = useState<PeriodKey>('this_month')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+  const [kpiResults, setKpiResults] = useState<Record<string, KpiResult> | null>(null)
+  const [kpiLoading, setKpiLoading] = useState(false)
 
   // Drag-and-drop state
   const dragIndex = useRef<number | null>(null)
@@ -159,6 +232,56 @@ export default function CustomBuilderPage() {
   }
 
   // ---------------------------------------------------------------------------
+  // KPI helpers
+  // ---------------------------------------------------------------------------
+  const toggleKpi = (id: KpiId) => {
+    setSelectedKpis(prev =>
+      prev.includes(id) ? prev.filter(k => k !== id) : [...prev, id]
+    )
+  }
+
+  const handleGenerateKpi = async () => {
+    if (selectedKpis.length === 0) return
+    setKpiLoading(true)
+    try {
+      const dates = period === 'custom'
+        ? { from: customFrom, to: customTo }
+        : getPeriodDates(period)
+      const params = new URLSearchParams()
+      selectedKpis.forEach(k => params.append('metrics[]', k))
+      if (dates.from) params.set('from', dates.from)
+      if (dates.to) params.set('to', dates.to)
+      const res = await fetch(`/api/reports/custom?${params.toString()}`)
+      if (res.ok) {
+        const data = await res.json()
+        setKpiResults(data.metrics ?? null)
+      } else {
+        alert('レポート生成に失敗しました')
+      }
+    } finally {
+      setKpiLoading(false)
+    }
+  }
+
+  const handleKpiCsvDownload = () => {
+    if (!kpiResults) return
+    const rows = [
+      ['指標', '値'],
+      ...Object.entries(kpiResults).map(([, v]) => [v.label, String(v.value)]),
+    ]
+    const csv = '\uFEFF' + rows
+      .map(r => r.map(v => `"${v.replace(/"/g, '""')}"`).join(','))
+      .join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `kpiレポート_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // ---------------------------------------------------------------------------
   // CSV download
   // ---------------------------------------------------------------------------
   const handleDownload = async () => {
@@ -208,6 +331,124 @@ export default function CustomBuilderPage() {
           <ChevronRight className="w-3.5 h-3.5" />
           <span className="text-slate-700 font-medium">カスタムレポートビルダー</span>
         </div>
+
+        {/* ── KPI レポート ── */}
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+          <h2 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+            <BarChart2 className="w-4 h-4 text-blue-500" />
+            KPIメトリクス レポート
+          </h2>
+
+          {/* KPI checkboxes grouped by category */}
+          <div className="mb-4">
+            <p className="text-xs text-slate-500 mb-2">集計する指標を選択してください</p>
+            {['案件', '財務', '発注', '品質'].map(cat => (
+              <div key={cat} className="mb-3">
+                <p className="text-xs font-medium text-slate-600 mb-1.5">{cat}</p>
+                <div className="flex flex-wrap gap-2">
+                  {KPI_OPTIONS.filter(k => k.category === cat).map(kpi => (
+                    <label
+                      key={kpi.id}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors text-sm ${
+                        selectedKpis.includes(kpi.id)
+                          ? 'border-blue-300 bg-blue-50 text-blue-700'
+                          : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedKpis.includes(kpi.id)}
+                        onChange={() => toggleKpi(kpi.id)}
+                        className="accent-blue-600 w-4 h-4"
+                      />
+                      {kpi.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Period selection */}
+          <div className="mb-4">
+            <p className="text-xs text-slate-500 mb-2">集計期間</p>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {[
+                { id: 'this_month' as PeriodKey, label: '今月' },
+                { id: 'last_month' as PeriodKey, label: '先月' },
+                { id: 'this_quarter' as PeriodKey, label: '今四半期' },
+                { id: 'this_year' as PeriodKey, label: '今年' },
+                { id: 'custom' as PeriodKey, label: 'カスタム' },
+              ].map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => setPeriod(p.id)}
+                  className={`px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                    period === p.id
+                      ? 'border-blue-400 bg-blue-50 text-blue-700'
+                      : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            {period === 'custom' && (
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={e => setCustomFrom(e.target.value)}
+                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <span className="text-slate-400 text-sm">〜</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={e => setCustomTo(e.target.value)}
+                  className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Generate button */}
+          <div className="flex gap-3 mb-5">
+            <button
+              onClick={handleGenerateKpi}
+              disabled={kpiLoading || selectedKpis.length === 0}
+              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              {kpiLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <BarChart2 className="w-4 h-4" />}
+              {kpiLoading ? '生成中...' : 'レポート生成'}
+            </button>
+            {kpiResults && (
+              <button
+                onClick={handleKpiCsvDownload}
+                className="flex items-center gap-2 px-5 py-2.5 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                CSV出力
+              </button>
+            )}
+          </div>
+
+          {/* KPI result cards */}
+          {kpiResults && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {Object.entries(kpiResults).map(([id, metric]) => (
+                <div key={id} className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
+                  <p className="text-xs text-slate-500 mb-1">{metric.label}</p>
+                  <p className="text-xl font-bold text-slate-800">
+                    {formatMetricValue(id, metric.value)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <hr className="border-slate-200" />
 
         {/* ── 1. レポート名 ── */}
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">

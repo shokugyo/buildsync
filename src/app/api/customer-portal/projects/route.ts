@@ -40,7 +40,7 @@ export async function GET() {
       photos: {
         orderBy: { createdAt: 'desc' },
         take: 6,
-        select: { id: true, filePath: true, comment: true },
+        select: { id: true, filePath: true, comment: true, createdAt: true },
       },
       inspections: {
         where: { status: { not: '完了' } },
@@ -51,7 +51,19 @@ export async function GET() {
         select: { id: true },
       },
       schedules: {
-        select: { progress: true },
+        select: { id: true, progress: true, status: true, name: true, startDate: true, endDate: true },
+      },
+      reports: {
+        orderBy: { workDate: 'desc' },
+        take: 3,
+        select: {
+          id: true,
+          workDate: true,
+          content: true,
+          progress: true,
+          weather: true,
+          reporter: { select: { name: true } },
+        },
       },
     },
     orderBy: { createdAt: 'desc' },
@@ -59,9 +71,16 @@ export async function GET() {
 
   const result = projects.map(p => {
     const scheduleCount = p.schedules.length
+    const completedSchedules = p.schedules.filter(s => s.status === '完了').length
     const avgProgress = scheduleCount > 0
       ? Math.round(p.schedules.reduce((sum: number, s: { progress: number }) => sum + (s.progress || 0), 0) / scheduleCount)
       : 0
+
+    // Remaining days calculation
+    const today = new Date()
+    const remainingDays = p.endDate
+      ? Math.ceil((new Date(p.endDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      : null
 
     return {
       id: p.id,
@@ -72,14 +91,31 @@ export async function GET() {
       startDate: p.startDate,
       endDate: p.endDate,
       progress: avgProgress,
+      remainingDays,
+      scheduleTotal: scheduleCount,
+      scheduleCompleted: completedSchedules,
       photoCount: p.photos.length,
       pendingInspections: p.inspections.length,
       openDefects: p.defects.length,
-      recentPhotos: p.photos.map(ph => ({
+      recentPhotos: p.photos.slice(0, 3).map(ph => ({
         id: ph.id,
         filePath: ph.filePath,
         caption: ph.comment,
-        takenAt: null,
+        takenAt: ph.createdAt,
+      })),
+      allPhotos: p.photos.map(ph => ({
+        id: ph.id,
+        filePath: ph.filePath,
+        caption: ph.comment,
+        takenAt: ph.createdAt,
+      })),
+      recentReports: p.reports.map(r => ({
+        id: r.id,
+        workDate: r.workDate,
+        content: r.content,
+        progress: r.progress,
+        weather: r.weather,
+        reporterName: r.reporter?.name || null,
       })),
     }
   })

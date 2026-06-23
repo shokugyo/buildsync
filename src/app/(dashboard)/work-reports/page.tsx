@@ -154,6 +154,10 @@ export default function WorkReportsPage() {
     <div>
       <Header title="作業報告管理" />
       <div className="p-6">
+        {/* ページ説明 */}
+        <p className="text-sm text-slate-500 mb-4">
+          協力会社・職人が提出する作業報告書（F-026）。施工内容・進捗・使用材料を記録します。
+        </p>
         {/* Filters */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 mb-4 flex flex-wrap gap-3 items-center">
           <div className="flex items-center gap-2">

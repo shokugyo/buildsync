@@ -35,6 +35,24 @@ self.addEventListener('activate', (event) => {
   self.clients.claim()
 })
 
+// push: Web Push通知を受信して表示
+self.addEventListener('push', (event) => {
+  const data = event.data?.json() ?? {}
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'BuildSync', {
+      body: data.body || '新しい通知があります',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+    })
+  )
+})
+
+// notificationclick: 通知クリック時にアプリを開く
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  event.waitUntil(clients.openWindow('/'))
+})
+
 // fetch: キャッシュファースト戦略
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return

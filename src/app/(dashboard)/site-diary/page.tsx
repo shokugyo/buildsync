@@ -52,6 +52,29 @@ const defaultForm = {
   workContent: '',
   issues: '',
   tomorrowPlan: '',
+  materials: '',
+}
+
+// issues フィールドに材料情報をJSON埋め込みするためのヘルパー
+function encodeIssues(issues: string, materials: string): string | null {
+  if (!issues && !materials) return null
+  if (materials) {
+    return JSON.stringify({ issues: issues || '', materials })
+  }
+  return issues || null
+}
+
+function decodeIssues(raw: string | null | undefined): { issues: string; materials: string } {
+  if (!raw) return { issues: '', materials: '' }
+  try {
+    const parsed = JSON.parse(raw) as { issues?: string; materials?: string }
+    if (typeof parsed === 'object' && parsed !== null && ('issues' in parsed || 'materials' in parsed)) {
+      return { issues: parsed.issues ?? '', materials: parsed.materials ?? '' }
+    }
+  } catch {
+    // plain text
+  }
+  return { issues: raw, materials: '' }
 }
 
 export default function SiteDiaryPage() {
@@ -115,13 +138,15 @@ export default function SiteDiaryPage() {
     const existing = diaryMap[dateStr]
     if (existing) {
       setActiveDiary(existing)
+      const { issues, materials } = decodeIssues(existing.issues)
       setForm({
         weather: existing.weather || '',
         temperature: existing.temperature != null ? String(existing.temperature) : '',
         workers: existing.workers != null ? String(existing.workers) : '',
         workContent: existing.workContent || '',
-        issues: existing.issues || '',
+        issues,
         tomorrowPlan: existing.tomorrowPlan || '',
+        materials,
       })
     } else {
       setActiveDiary(null)
@@ -148,7 +173,7 @@ export default function SiteDiaryPage() {
         temperature: form.temperature !== '' ? parseFloat(form.temperature) : null,
         workers: form.workers !== '' ? parseInt(form.workers) : null,
         workContent: form.workContent || null,
-        issues: form.issues || null,
+        issues: encodeIssues(form.issues, form.materials),
         tomorrowPlan: form.tomorrowPlan || null,
       }
 
@@ -202,6 +227,10 @@ export default function SiteDiaryPage() {
       <div className="flex-1 overflow-auto">
         <Header title="現場日誌" />
         <div className="p-6">
+          {/* ページ説明 */}
+          <p className="text-sm text-slate-500 mb-4">
+            現場監督が作成する現場日誌（F-025）。天候・作業員数・作業内容・安全事項を記録します。
+          </p>
           {/* Controls */}
           <div className="flex flex-wrap items-center gap-3 mb-6">
             <select
@@ -381,13 +410,24 @@ export default function SiteDiaryPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">問題・課題</label>
+              <label className="block text-xs font-medium text-slate-600 mb-1">使用材料</label>
+              <textarea
+                value={form.materials}
+                onChange={(e) => setForm({ ...form, materials: e.target.value })}
+                rows={2}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                placeholder="使用した材料・資材を入力してください"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">問題・課題・安全事項</label>
               <textarea
                 value={form.issues}
                 onChange={(e) => setForm({ ...form, issues: e.target.value })}
                 rows={3}
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                placeholder="発生した問題や課題を入力してください"
+                placeholder="発生した問題・課題・安全に関する事項を入力してください"
               />
             </div>
 

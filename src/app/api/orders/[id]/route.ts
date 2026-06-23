@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { logAudit } from '@/lib/audit'
 import { sendNotificationToMany } from '@/lib/notify'
 import { hasRole, APPROVER_ROLES } from '@/lib/permissions'
+import { dispatchWebhook } from '@/lib/webhook'
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions)
@@ -136,6 +137,77 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         companyId: (session.user as any).companyId,
       })
     }
+    return NextResponse.json(order)
+  } catch {
+    return NextResponse.json({ error: '更新に失敗しました' }, { status: 500 })
+  }
+}
+
+export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const session = await getServerSession(authOptions)
+  if (!session) return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
+
+  const body = await req.json()
+  const { status } = body
+
+  if (!status) {
+    return NextResponse.json({ error: 'statusは必須です' }, { status: 400 })
+  }
+
+  const companyId = (session.user as any).companyId
+
+  const existing = await prisma.order.findFirst({
+    where: { id: params.id, companyId },
+  })
+  if (!existing) return NextResponse.json({ error: '発注が見つかりません' }, { status: 404 })
+
+  try {
+    const updateData: Record<string, unknown> = { status }
+
+    // 受注確認済: confirmedAt をセット
+    if (status === '受注確認済') {
+      updateData.confirmedAt = new Date()
+      updateData.confirmedBy = (session.user as any).id
+    }
+    // 完了: deliveredAt をセット
+    if (status === '完了') {
+      updateData.deliveredAt = new Date()
+    }
+
+    const order = await prisma.order.update({
+      where: { id: params.id },
+      data: updateData,
+      include: {
+        project: { select: { id: true, name: true, projectNumber: true } },
+        supplier: { select: { id: true, name: true } },
+        items: { orderBy: { sortOrder: 'asc' } },
+        approvals: {
+          include: { approver: { select: { id: true, name: true } } },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    })
+
+    await logAudit({
+      userId: (session.user as any).id,
+      userName: (session.user as any).name || '',
+      action: 'UPDATE',
+      target: '発注',
+      targetId: params.id,
+      detail: `ステータス変更: ${status}`,
+      companyId,
+    })
+
+    // Webhook: order.confirmed
+    if (status === '受注確認済') {
+      await dispatchWebhook(companyId, 'order.confirmed', {
+        id: params.id,
+        orderNumber: order.orderNumber,
+        supplierId: order.supplierId,
+        projectId: order.projectId,
+      })
+    }
+
     return NextResponse.json(order)
   } catch {
     return NextResponse.json({ error: '更新に失敗しました' }, { status: 500 })

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Header from '@/components/Header'
-import { Plus, X, Download, Filter, ShieldCheck, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
+import { Plus, X, Download, Filter, ShieldCheck, AlertTriangle, CheckCircle, Clock, FileDown } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 
 const SAFETY_TYPES = [
@@ -337,7 +337,23 @@ export default function SafetyDocsPage() {
               <option key={t} value={t}>{t}</option>
             ))}
           </select>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <a
+              href="/api/export/safety?type=roster"
+              download
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition-colors font-medium"
+            >
+              <FileDown className="w-4 h-4 text-slate-500" />
+              作業員名簿（CSV）
+            </a>
+            <a
+              href="/api/export/safety?type=ky"
+              download
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-700 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg transition-colors font-medium"
+            >
+              <FileDown className="w-4 h-4 text-slate-500" />
+              KY活動記録（CSV）
+            </a>
             <button
               onClick={() => { setShowModal(true); setError('') }}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"

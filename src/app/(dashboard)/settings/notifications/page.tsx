@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Header from '@/components/Header'
 import Link from 'next/link'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { Bell, ChevronDown, ChevronUp } from 'lucide-react'
 
 const LEFT_MENU = [
   { label: 'プロフィール情報', href: '/settings' },
@@ -285,8 +285,258 @@ export default function NotificationsSettingsPage() {
               {saving ? '保存中...' : '保存する'}
             </button>
           </div>
+
+          {/* プッシュ通知テストセクション */}
+          <PushNotificationTest />
         </div>
       </div>
     </div>
   )
+}
+
+type NotifPermission = 'default' | 'granted' | 'denied'
+
+function PushNotificationTest() {
+  const [permission, setPermission] = useState<NotifPermission>('default')
+  const [sending, setSending] = useState(false)
+  const [result, setResult] = useState<string | null>(null)
+  const [swRegistered, setSwRegistered] = useState(false)
+  const [subscribed, setSubscribed] = useState(false)
+  const [vapidConfigured, setVapidConfigured] = useState(false)
+
+  useEffect(() => {
+    if (typeof Notification !== 'undefined') {
+      setPermission(Notification.permission as NotifPermission)
+    }
+    // Check SW registration status
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistration('/sw.js').then(reg => {
+        if (reg) setSwRegistered(true)
+      })
+    }
+    // Check VAPID configuration
+    fetch('/api/notifications/push/vapid')
+      .then(r => r.json())
+      .then((data: { configured?: boolean }) => {
+        setVapidConfigured(!!data.configured)
+      })
+      .catch(() => {})
+  }, [])
+
+  const handleRegisterSW = async () => {
+    if (!('serviceWorker' in navigator)) {
+      setResult('このブラウザはService Workerに対応していません')
+      return
+    }
+    setSending(true)
+    setResult(null)
+    try {
+      await navigator.serviceWorker.register('/sw.js')
+      setSwRegistered(true)
+      setResult('Service Workerを登録しました')
+    } catch {
+      setResult('Service Workerの登録に失敗しました')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleSubscribe = async () => {
+    if (!swRegistered) {
+      setResult('先にService Workerを登録してください')
+      return
+    }
+    if (!('PushManager' in window)) {
+      setResult('このブラウザはWeb Pushに対応していません')
+      return
+    }
+    setSending(true)
+    setResult(null)
+    try {
+      // Request notification permission
+      const perm = await Notification.requestPermission()
+      setPermission(perm as NotifPermission)
+      if (perm !== 'granted') {
+        setResult('通知の許可が必要です')
+        setSending(false)
+        return
+      }
+
+      // Get VAPID public key
+      const vapidRes = await fetch('/api/notifications/push/vapid')
+      const vapidData = await vapidRes.json() as { publicKey: string }
+      const publicKey = vapidData.publicKey
+
+      // Subscribe via PushManager
+      const reg = await navigator.serviceWorker.ready
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: publicKey === 'DEMO_KEY' ? undefined : (urlBase64ToUint8Array(publicKey) as unknown as ArrayBuffer),
+      })
+
+      // Save subscription to server
+      await fetch('/api/notifications/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(subscription),
+      })
+      setSubscribed(true)
+      setResult('Web Push通知を購読しました')
+    } catch (err) {
+      setResult(`購読に失敗しました: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleBrowserTest = async () => {
+    if (typeof Notification === 'undefined') {
+      setResult('このブラウザはWeb通知に対応していません')
+      return
+    }
+
+    setSending(true)
+    setResult(null)
+    try {
+      const perm = await Notification.requestPermission()
+      setPermission(perm as NotifPermission)
+      if (perm === 'granted') {
+        new Notification('BuildSync', { body: 'テスト通知です' })
+        setResult('テスト通知を送信しました')
+      } else if (perm === 'denied') {
+        setResult('通知がブロックされています。ブラウザの設定から許可してください。')
+      } else {
+        setResult('通知の許可が得られませんでした')
+      }
+    } catch {
+      setResult('通知の送信に失敗しました')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleServerPushTest = async () => {
+    setSending(true)
+    setResult(null)
+    try {
+      const res = await fetch('/api/notifications/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'BuildSync', body: 'サーバーからのテスト通知です' }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setResult(`サーバープッシュ送信完了: ${data.message ?? 'OK'}`)
+      } else {
+        setResult(`エラー: ${data.error ?? '送信に失敗しました'}`)
+      }
+    } catch {
+      setResult('サーバープッシュ送信に失敗しました')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const permLabel =
+    permission === 'granted' ? '許可済' :
+    permission === 'denied' ? 'ブロック' :
+    '未許可'
+
+  const permColor =
+    permission === 'granted' ? 'text-green-600 bg-green-50 border-green-200' :
+    permission === 'denied' ? 'text-red-600 bg-red-50 border-red-200' :
+    'text-amber-600 bg-amber-50 border-amber-200'
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5 mt-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Bell className="w-4 h-4 text-blue-600" />
+        <h3 className="font-semibold text-slate-900">プッシュ通知テスト</h3>
+      </div>
+      <p className="text-sm text-slate-600 mb-4">
+        ブラウザのプッシュ通知やサーバーからのプッシュ通知をテスト送信できます。
+      </p>
+
+      {/* 設定状態 */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-600">通知許可:</span>
+          <span className={`text-xs font-medium px-2 py-0.5 rounded border ${permColor}`}>
+            {permLabel}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-600">Service Worker:</span>
+          <span className={`text-xs font-medium px-2 py-0.5 rounded border ${swRegistered ? 'text-green-600 bg-green-50 border-green-200' : 'text-slate-500 bg-slate-50 border-slate-200'}`}>
+            {swRegistered ? '登録済' : '未登録'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-600">VAPIDキー:</span>
+          <span className={`text-xs font-medium px-2 py-0.5 rounded border ${vapidConfigured ? 'text-green-600 bg-green-50 border-green-200' : 'text-amber-600 bg-amber-50 border-amber-200'}`}>
+            {vapidConfigured ? '設定済' : '未設定（モック）'}
+          </span>
+        </div>
+        {subscribed && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-600">購読:</span>
+            <span className="text-xs font-medium px-2 py-0.5 rounded border text-green-600 bg-green-50 border-green-200">購読中</span>
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <button
+          onClick={handleRegisterSW}
+          disabled={sending || swRegistered}
+          className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-800 disabled:bg-slate-400 text-white px-4 py-2 rounded-lg text-sm font-medium"
+        >
+          Service Worker登録
+        </button>
+        <button
+          onClick={handleSubscribe}
+          disabled={sending || subscribed}
+          className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white px-4 py-2 rounded-lg text-sm font-medium"
+        >
+          購読
+        </button>
+        <button
+          onClick={handleBrowserTest}
+          disabled={sending}
+          className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg text-sm font-medium"
+        >
+          <Bell className="w-4 h-4" />
+          ブラウザ通知テスト
+        </button>
+        <button
+          onClick={handleServerPushTest}
+          disabled={sending}
+          className="flex items-center gap-1.5 border border-slate-300 hover:bg-slate-50 disabled:opacity-50 text-slate-700 px-4 py-2 rounded-lg text-sm font-medium"
+        >
+          サーバープッシュテスト
+        </button>
+      </div>
+
+      {result && (
+        <div className={`mt-3 text-sm px-3 py-2 rounded-lg border ${
+          result.includes('完了') || result.includes('しました') || result.includes('購読')
+            ? 'text-green-700 bg-green-50 border-green-200'
+            : 'text-red-700 bg-red-50 border-red-200'
+        }`}>
+          {result}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = window.atob(base64)
+  const outputArray = new Uint8Array(rawData.length)
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i)
+  }
+  return outputArray
 }

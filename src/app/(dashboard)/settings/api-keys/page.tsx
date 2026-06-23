@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Header from '@/components/Header'
-import { Plus, X, Trash2, Key, Copy, Check, AlertTriangle } from 'lucide-react'
+import { Plus, X, Trash2, Key, Copy, Check, AlertTriangle, ChevronDown, ChevronUp, BarChart2 } from 'lucide-react'
 
 const LEFT_MENU = [
   { label: 'プロフィール情報', href: '/settings' },
@@ -33,6 +33,136 @@ type ApiKey = {
   expiresAt: string | null
   enabled: boolean
   createdAt: string
+}
+
+type UsageData = {
+  totalRequests: number
+  dailyData: { date: string; count: number }[]
+  lastUsed: string
+}
+
+const RATE_LIMIT = 1000
+
+function UsageBar({ value, max }: { value: number; max: number }) {
+  const pct = Math.min(100, Math.round((value / max) * 100))
+  const color = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-amber-500' : 'bg-blue-500'
+  return (
+    <div className="w-full">
+      <div className="flex justify-between text-xs text-slate-500 mb-1">
+        <span>{value.toLocaleString()} req</span>
+        <span>{pct}% / {max.toLocaleString()} req/day</span>
+      </div>
+      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+        <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function MiniBarChart({ data }: { data: { date: string; count: number }[] }) {
+  if (!data || data.length === 0) return null
+  const max = Math.max(...data.map(d => d.count), 1)
+  const chartH = 40
+  const barW = 20
+  const gap = 4
+  const totalW = data.length * (barW + gap) - gap
+
+  return (
+    <div>
+      <div className="text-xs text-slate-500 mb-1">直近7日間のリクエスト数</div>
+      <svg width={totalW} height={chartH + 20} className="overflow-visible">
+        {data.map((d, i) => {
+          const barH = Math.max(2, Math.round((d.count / max) * chartH))
+          const x = i * (barW + gap)
+          const y = chartH - barH
+          const label = d.date.slice(5) // MM-DD
+          return (
+            <g key={d.date}>
+              <rect x={x} y={y} width={barW} height={barH} rx={2} className="fill-blue-500 opacity-80" />
+              <text x={x + barW / 2} y={chartH + 14} textAnchor="middle" fontSize={8} className="fill-slate-400">
+                {label}
+              </text>
+              <title>{d.date}: {d.count}件</title>
+            </g>
+          )
+        })}
+      </svg>
+    </div>
+  )
+}
+
+function UsageSection({ keyId }: { keyId: string }) {
+  const [usage, setUsage] = useState<UsageData | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [open, setOpen] = useState(false)
+
+  const load = () => {
+    if (usage) return
+    setLoading(true)
+    fetch(`/api/api-keys/${keyId}/usage`)
+      .then(r => r.json())
+      .then(data => { setUsage(data); setLoading(false) })
+      .catch(() => setLoading(false))
+  }
+
+  const toggle = () => {
+    if (!open) load()
+    setOpen(prev => !prev)
+  }
+
+  // Today's request count: last element in dailyData
+  const todayCount = usage?.dailyData?.[usage.dailyData.length - 1]?.count ?? 0
+
+  return (
+    <div className="border-t border-slate-100 mt-3 pt-3">
+      <button
+        onClick={toggle}
+        className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-blue-600"
+      >
+        <BarChart2 className="w-3.5 h-3.5" />
+        使用量を{open ? '閉じる' : '表示'}
+        {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+      </button>
+
+      {open && (
+        <div className="mt-3 space-y-3">
+          {loading ? (
+            <p className="text-xs text-slate-400">読み込み中...</p>
+          ) : usage ? (
+            <>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-slate-50 rounded-lg p-3">
+                  <p className="text-xs text-slate-500 mb-1">今月のリクエスト数</p>
+                  <p className="text-xl font-bold text-slate-900">{usage.totalRequests.toLocaleString()}</p>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-3">
+                  <p className="text-xs text-slate-500 mb-1">最終使用日時</p>
+                  <p className="text-sm font-medium text-slate-900">
+                    {new Date(usage.lastUsed).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-3">
+                  <p className="text-xs text-slate-500 mb-1">レート制限</p>
+                  <p className="text-sm font-medium text-slate-900">{RATE_LIMIT.toLocaleString()} req/day</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 rounded-lg p-3">
+                <p className="text-xs text-slate-500 mb-2">本日の使用率</p>
+                <UsageBar value={todayCount} max={RATE_LIMIT} />
+              </div>
+
+              <div className="bg-slate-50 rounded-lg p-3">
+                <MiniBarChart data={usage.dailyData} />
+              </div>
+            </>
+          ) : (
+            <p className="text-xs text-red-500">データを取得できませんでした</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function ApiKeysPage() {
@@ -154,47 +284,41 @@ export default function ApiKeysPage() {
               <p className="text-slate-500">APIキーが登録されていません</p>
             </div>
           ) : (
-            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50">
-                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">名前</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">キー</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">作成日</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">最終使用</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">有効期限</th>
-                    <th className="px-4 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {apiKeys.map(k => (
-                    <tr key={k.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
-                      <td className="px-4 py-3 font-medium text-slate-900">{k.name}</td>
-                      <td className="px-4 py-3 font-mono text-slate-500 text-xs">{k.key}</td>
-                      <td className="px-4 py-3 text-slate-500">{formatDate(k.createdAt)}</td>
-                      <td className="px-4 py-3 text-slate-500">{formatDate(k.lastUsedAt)}</td>
-                      <td className="px-4 py-3 text-slate-500">
-                        {k.expiresAt ? (
-                          <span className={new Date(k.expiresAt) < new Date() ? 'text-red-600' : ''}>
-                            {formatDate(k.expiresAt)}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">無制限</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleDelete(k.id, k.name)}
-                          className="text-slate-400 hover:text-red-600 p-1"
-                          title="削除"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-3">
+              {apiKeys.map(k => (
+                <div key={k.id} className="bg-white rounded-xl border border-slate-200 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-slate-900">{k.name}</p>
+                      <p className="font-mono text-xs text-slate-400 mt-0.5">{k.key}</p>
+                    </div>
+                    <button
+                      onClick={() => handleDelete(k.id, k.name)}
+                      className="text-slate-400 hover:text-red-600 p-1 flex-shrink-0"
+                      title="削除"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-4 mt-2 text-xs text-slate-500">
+                    <span>作成日: {formatDate(k.createdAt)}</span>
+                    <span>最終使用: {formatDate(k.lastUsedAt)}</span>
+                    <span>
+                      有効期限:{' '}
+                      {k.expiresAt ? (
+                        <span className={new Date(k.expiresAt) < new Date() ? 'text-red-600' : ''}>
+                          {formatDate(k.expiresAt)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">無制限</span>
+                      )}
+                    </span>
+                  </div>
+
+                  <UsageSection keyId={k.id} />
+                </div>
+              ))}
             </div>
           )}
         </div>

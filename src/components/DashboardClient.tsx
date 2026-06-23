@@ -60,6 +60,7 @@ interface DashboardClientProps {
     contractedEstimates: number
     orderRate: number
     todaySchedules: any[]
+    todayInspections: any[]
     recentChats: { id: string; projectName: string; projectId: string; lastMessage: string; lastSenderName: string; lastAt: string; unreadCount: number }[]
     pendingInspections: number
     pendingOrders: number
@@ -167,7 +168,9 @@ export default function DashboardClient({ initialWidgets, data }: DashboardClien
       case 'recent_activity':
         return d.recentAudit.length > 0 ? <RecentActivityWidget key={id} logs={d.recentAudit} /> : null
       case 'schedule_today':
-        return d.todaySchedules.length > 0 ? <RecentSchedulesWidget key={id} schedules={d.todaySchedules} /> : null
+        return (d.todaySchedules.length > 0 || d.todayInspections.length > 0) ? (
+          <RecentSchedulesWidget key={id} schedules={d.todaySchedules} inspections={d.todayInspections} />
+        ) : null
       case 'cost_overview':
         return d.projectRows.length > 0 ? <CostOverviewWidget key={id} rows={d.projectRows} /> : null
       case 'inspection_status':
@@ -178,7 +181,9 @@ export default function DashboardClient({ initialWidgets, data }: DashboardClien
       case 'active_projects':
         return <ActiveProjectsWidget key={id} data={d} />
       case 'recent_schedules':
-        return d.todaySchedules.length > 0 ? <RecentSchedulesWidget key={id} schedules={d.todaySchedules} /> : null
+        return (d.todaySchedules.length > 0 || d.todayInspections.length > 0) ? (
+          <RecentSchedulesWidget key={id} schedules={d.todaySchedules} inspections={d.todayInspections} />
+        ) : null
       case 'recent_chats':
         return <UnreadChatsWidget key={id} chats={d.recentChats} />
       case 'pending_orders':
@@ -398,7 +403,7 @@ function ActiveProjectsWidget({ data }: { data: DashboardClientProps['data'] }) 
   )
 }
 
-function RecentSchedulesWidget({ schedules }: { schedules: any[] }) {
+function RecentSchedulesWidget({ schedules, inspections = [] }: { schedules: any[]; inspections?: any[] }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-100">
       <div className="flex items-center justify-between p-5 border-b border-slate-100">
@@ -412,7 +417,7 @@ function RecentSchedulesWidget({ schedules }: { schedules: any[] }) {
       </div>
       <div className="divide-y divide-slate-50">
         {schedules.map((s: any) => (
-          <Link key={s.id} href={`/projects/${s.project.id}`} className="flex items-center gap-4 px-5 py-3 hover:bg-slate-50 transition-colors">
+          <Link key={`sch-${s.id}`} href={`/projects/${s.project.id}`} className="flex items-center gap-4 px-5 py-3 hover:bg-slate-50 transition-colors">
             <div className="flex-shrink-0 w-2 h-2 rounded-full bg-blue-500 mt-0.5" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-slate-900">{s.name}</p>
@@ -426,6 +431,23 @@ function RecentSchedulesWidget({ schedules }: { schedules: any[] }) {
             }`}>{s.status}</span>
           </Link>
         ))}
+        {inspections.map((insp: any) => (
+          <Link key={`insp-${insp.id}`} href={`/inspections/${insp.id}`} className="flex items-center gap-4 px-5 py-3 hover:bg-slate-50 transition-colors">
+            <div className="flex-shrink-0 w-2 h-2 rounded-full bg-orange-400 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-900">{insp.name}</p>
+              <p className="text-xs text-slate-500">
+                {insp.project?.name}（{insp.project?.projectNumber}）
+                {insp.scheduledDate && ` · ${new Date(insp.scheduledDate).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}`}
+              </p>
+            </div>
+            {insp.inspector && <span className="text-xs text-slate-400 flex-shrink-0">{insp.inspector.name}</span>}
+            <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0 bg-orange-100 text-orange-700">検査</span>
+          </Link>
+        ))}
+        {schedules.length === 0 && inspections.length === 0 && (
+          <p className="px-5 py-4 text-sm text-slate-500">本日の予定はありません</p>
+        )}
       </div>
     </div>
   )
@@ -630,6 +652,15 @@ function RecentProjectsAndNotifs({
                 <p className="text-xs text-slate-500 mt-0.5">
                   {project.customer?.name} | 担当: {project.manager?.name || '-'}
                 </p>
+                {project.address && (
+                  <p className="text-xs text-slate-400 truncate mt-0.5">{project.address}</p>
+                )}
+                {(project.startDate || project.endDate) && (
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {project.startDate ? formatDate(project.startDate) : '-'} 〜 {project.endDate ? formatDate(project.endDate) : '-'}
+                  </p>
+                )}
+                <p className="text-xs text-slate-300 mt-0.5">更新: {formatDate(project.updatedAt)}</p>
               </div>
               <div className="text-right ml-4 flex-shrink-0">
                 <p className="text-sm font-medium text-slate-900">{formatCurrency(project.contractAmount)}</p>

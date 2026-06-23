@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { logAudit } from '@/lib/audit'
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions)
@@ -51,7 +52,20 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (!session) return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
 
   try {
+    const photo = await prisma.photo.findUnique({
+      where: { id: params.id },
+      include: { project: { select: { name: true } } },
+    })
     await prisma.photo.delete({ where: { id: params.id } })
+    await logAudit({
+      userId: (session.user as any).id,
+      userName: (session.user as any).name || '',
+      action: 'photo_delete',
+      target: '写真',
+      targetId: params.id,
+      detail: photo?.project?.name ?? '',
+      companyId: (session.user as any).companyId,
+    })
     return NextResponse.json({ success: true })
   } catch {
     return NextResponse.json({ error: '削除に失敗しました' }, { status: 500 })

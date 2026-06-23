@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { logAudit } from '@/lib/audit'
 
 function toCsv(rows: string[][]): string {
   return rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
@@ -11,6 +12,9 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
   const companyId = (session.user as any).companyId
+
+  const { searchParams } = new URL(req.url)
+  const format = searchParams.get('format') || 'csv'
 
   const projects = await prisma.project.findMany({
     where: { companyId, deletedAt: null },
@@ -63,12 +67,24 @@ export async function GET(req: NextRequest) {
     ]
   })
 
+  await logAudit({
+    userId: (session.user as any).id,
+    userName: (session.user as any).name || '',
+    action: 'export_download',
+    target: '粗利CSV',
+    detail: `format=${format}`,
+    companyId,
+  })
+
+  const dateStr = new Date().toISOString().slice(0, 10)
+  const filename = format === 'excel' ? `gross-profit_${dateStr}.csv` : `gross-profit_${dateStr}.csv`
+
   const bom = '\uFEFF'
   const csv = bom + toCsv([header, ...rows])
   return new NextResponse(csv, {
     headers: {
       'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="gross-profit_${new Date().toISOString().slice(0, 10)}.csv"`,
+      'Content-Disposition': `attachment; filename="${filename}"`,
     },
   })
 }

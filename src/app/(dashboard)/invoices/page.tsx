@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Header from '@/components/Header'
 import { formatDate, formatCurrency, getStatusColor } from '@/lib/utils'
-import { Receipt, Plus, X, Trash2, Printer, Pencil, Download, AlertCircle, ChevronDown, ChevronRight, CreditCard, Bell, Eye, Upload } from 'lucide-react'
+import { Receipt, Plus, X, Trash2, Printer, Pencil, Download, AlertCircle, ChevronDown, ChevronRight, CreditCard, Bell, Eye, Upload, ClipboardCheck } from 'lucide-react'
 import CsvImportModal from '@/components/CsvImportModal'
 
 interface LineItem {
@@ -13,6 +13,15 @@ interface LineItem {
   unitPrice: string
   amount: string
   taxRate: number
+}
+
+interface ApprovalRecord {
+  id: string
+  level: number
+  action: string
+  comment?: string | null
+  createdAt: string
+  approver: { id: string; name: string }
 }
 
 interface Invoice {
@@ -26,11 +35,13 @@ interface Invoice {
   dueDate?: string | null
   paidDate?: string | null
   notes?: string | null
+  rejectReason?: string | null
   reminderSentAt?: string | null
   reminderCount: number
   project: { id: string; name: string; projectNumber: string }
   customer?: { id: string; name: string } | null
   items: { id: string; name: string; quantity: number; unitPrice: number; amount: number; sortOrder: number; taxRate: number }[]
+  approvals?: ApprovalRecord[]
 }
 
 interface PaymentRecord {
@@ -96,6 +107,8 @@ export default function InvoicesPage() {
   const [paymentError, setPaymentError] = useState('')
   const [sendingReminder, setSendingReminder] = useState<string | null>(null)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [requestingApproval, setRequestingApproval] = useState<string | null>(null)
+  const [approvalHistories, setApprovalHistories] = useState<Record<string, ApprovalRecord[]>>({})
 
   const fetchAll = useCallback(async () => {
     const safeJson = async (r: Response) => { try { return await r.json() } catch { return null } }
@@ -230,6 +243,37 @@ export default function InvoicesPage() {
     if (res.ok) {
       const saved = await res.json()
       setInvoices((prev) => prev.map((i) => i.id === id ? saved : i))
+    }
+  }
+
+  const requestApproval = async (id: string) => {
+    if (!confirm('この請求書を承認依頼中に変更しますか？')) return
+    setRequestingApproval(id)
+    try {
+      const res = await fetch(`/api/invoices/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: '承認依頼中' }),
+      })
+      if (res.ok) {
+        const saved = await res.json()
+        setInvoices((prev) => prev.map((i) => i.id === id ? saved : i))
+      }
+    } finally {
+      setRequestingApproval(null)
+    }
+  }
+
+  const fetchApprovalHistory = async (invoiceId: string) => {
+    if (approvalHistories[invoiceId]) return
+    try {
+      const res = await fetch(`/api/invoices/${invoiceId}/approve`)
+      if (res.ok) {
+        const data = await res.json()
+        setApprovalHistories((prev) => ({ ...prev, [invoiceId]: Array.isArray(data) ? data : [] }))
+      }
+    } catch {
+      // ignore
     }
   }
 
@@ -416,7 +460,11 @@ export default function InvoicesPage() {
                         <tr key={inv.id} className={`hover:bg-slate-50 transition-colors ${overdue ? 'bg-red-50/40' : ''}`}>
                           <td className="px-2 py-3">
                             <button
-                              onClick={() => setExpandedId(expandedId === inv.id ? null : inv.id)}
+                              onClick={() => {
+                                const next = expandedId === inv.id ? null : inv.id
+                                setExpandedId(next)
+                                if (next) fetchApprovalHistory(next)
+                              }}
                               className="text-slate-400 hover:text-slate-600"
                             >
                               {expandedId === inv.id ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -486,6 +534,16 @@ export default function InvoicesPage() {
                                   <Bell className="w-3.5 h-3.5" />
                                 </button>
                               )}
+                              {(inv.status === '下書き' || inv.status === '作成済' || inv.status === '差し戻し') && (
+                                <button
+                                  onClick={() => requestApproval(inv.id)}
+                                  disabled={requestingApproval === inv.id}
+                                  className="p-1 text-slate-400 hover:text-amber-600 disabled:opacity-50"
+                                  title="承認依頼"
+                                >
+                                  <ClipboardCheck className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                               <button onClick={() => handleDelete(inv.id)} className="p-1 text-slate-400 hover:text-red-600" title="削除">
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -548,6 +606,37 @@ export default function InvoicesPage() {
                                 <p className="text-xs text-slate-400">明細なし</p>
                               )}
                               {inv.notes && <p className="text-xs text-slate-500 mt-2">備考: {inv.notes}</p>}
+                              {inv.rejectReason && (
+                                <p className="text-xs text-red-600 mt-2">差し戻し理由: {inv.rejectReason}</p>
+                              )}
+
+                              {/* 承認履歴アコーディオン */}
+                              {(() => {
+                                const history = approvalHistories[inv.id]
+                                if (!history) return null
+                                if (history.length === 0) return (
+                                  <p className="text-xs text-slate-400 mt-3">承認履歴はありません</p>
+                                )
+                                return (
+                                  <div className="mt-3">
+                                    <p className="text-xs font-semibold text-slate-600 mb-1.5">承認履歴</p>
+                                    <ul className="space-y-1">
+                                      {history.map((h) => (
+                                        <li key={h.id} className="flex items-start gap-2 text-xs bg-white rounded px-2 py-1.5 border border-slate-100">
+                                          <span className={`mt-0.5 px-1.5 py-0.5 rounded-full font-medium text-xs whitespace-nowrap ${h.action === '承認' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                            Lv.{h.level} {h.action}
+                                          </span>
+                                          <div className="flex-1">
+                                            <span className="font-medium text-slate-700">{h.approver.name}</span>
+                                            {h.comment && <p className="text-slate-500 mt-0.5">{h.comment}</p>}
+                                          </div>
+                                          <span className="text-slate-400 whitespace-nowrap">{formatDate(h.createdAt)}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )
+                              })()}
                             </td>
                           </tr>
                         )}
