@@ -3,6 +3,7 @@ import { authOptions } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import BottomNav from '@/components/BottomNav'
+import FloatingAI from '@/components/FloatingAI'
 
 export default async function DashboardLayout({
   children,
@@ -22,6 +23,7 @@ export default async function DashboardLayout({
         {children}
       </main>
       <BottomNav />
+      <FloatingAI />
     </div>
   )
 }

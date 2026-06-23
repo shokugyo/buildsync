@@ -86,6 +86,7 @@ model Company {
   warranties            Warranty[]
   reportSchedules       ReportSchedule[]
   bids                  Bid[]
+  documentHashes        DocumentHash[]
 }
 
 model User {
@@ -1685,6 +1686,21 @@ model ReportSchedule {
   lastSentAt  DateTime?
   createdAt   DateTime  @default(now())
   company     Company   @relation(fields: [companyId], references: [id])
+}
+
+model DocumentHash {
+  id           String   @id @default(cuid())
+  documentType String   // 'invoice' | 'order' | 'contract' | 'estimate'
+  documentId   String
+  hash         String   // SHA-256 hex
+  algorithm    String   @default("SHA-256")
+  createdAt    DateTime @default(now())
+  createdBy    String
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id])
+
+  @@unique([documentType, documentId])
+  @@index([companyId])
 }
 
 model Bid {

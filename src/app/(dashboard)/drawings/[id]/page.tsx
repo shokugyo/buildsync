@@ -6,8 +6,15 @@ import Link from 'next/link'
 import Header from '@/components/Header'
 import { formatDate, formatDateTime } from '@/lib/utils'
 import {
-  ArrowLeft, MapPin, History, CheckCircle, Circle, X, Plus, ExternalLink, ZoomIn, ZoomOut, RotateCcw
+  ArrowLeft, MapPin, History, CheckCircle, Circle, X, Plus, ExternalLink, ZoomIn, ZoomOut, RotateCcw, Box
 } from 'lucide-react'
+
+const BIM_EXTENSIONS = ['.ifc', '.rvt', '.dwg', '.dxf', '.nwd', '.fbx']
+const BIM_VIEWERS = [
+  { name: 'IFC.js Viewer（無料）', url: 'https://ifcjs.github.io/web-ifc-viewer/example/index.html' },
+  { name: 'xeokit (xeoglBIM)', url: 'https://xeokit.io/demo.html' },
+  { name: 'Autodesk Viewer', url: 'https://viewer.autodesk.com/' },
+]
 
 interface DrawingPin {
   id: string
@@ -27,6 +34,8 @@ interface Drawing {
   version: number
   isLatest: boolean
   filePath: string
+  fileType?: string | null
+  isBim?: boolean
   description?: string | null
   createdAt: string
   updatedAt: string
@@ -113,6 +122,7 @@ export default function DrawingViewerPage() {
 
   const openPins = pins.filter(p => !p.resolvedAt)
   const resolvedPins = pins.filter(p => p.resolvedAt)
+  const isBimDrawing = drawing.isBim || BIM_EXTENSIONS.some(ext => drawing.filePath.toLowerCase().endsWith(ext))
 
   return (
     <div>
@@ -147,7 +157,14 @@ export default function DrawingViewerPage() {
         {/* Drawing info */}
         <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-center justify-between">
           <div>
-            <h2 className="font-bold text-lg">{drawing.name}</h2>
+            <div className="flex items-center gap-2 mb-1">
+              <h2 className="font-bold text-lg">{drawing.name}</h2>
+              {isBimDrawing && (
+                <span className="flex items-center gap-1 bg-purple-100 text-purple-700 text-xs px-2 py-0.5 rounded-full font-medium">
+                  <Box className="w-3 h-3" /> BIM
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-4 text-sm text-slate-500 mt-1">
               <span>{drawing.drawingType}</span>
               {drawing.drawingNumber && <span>図面番号: {drawing.drawingNumber}</span>}
@@ -163,6 +180,31 @@ export default function DrawingViewerPage() {
             <p>{formatDate(drawing.createdAt)}</p>
           </div>
         </div>
+
+        {/* BIM Viewer Links */}
+        {isBimDrawing && (
+          <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Box className="w-4 h-4 text-purple-700" />
+              <h3 className="font-semibold text-purple-800 text-sm">3Dビューアで開く</h3>
+            </div>
+            <p className="text-xs text-purple-700 mb-3">以下の外部ビューアでBIMファイルを3D閲覧できます。ビューアのサイトでファイルをアップロードしてください。</p>
+            <div className="flex flex-wrap gap-2">
+              {BIM_VIEWERS.map(viewer => (
+                <a
+                  key={viewer.url}
+                  href={viewer.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 bg-white border border-purple-300 text-purple-700 hover:bg-purple-100 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  {viewer.name}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
           {/* Image viewer */}

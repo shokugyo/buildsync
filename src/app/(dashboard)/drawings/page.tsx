@@ -4,9 +4,16 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import Link from 'next/link'
 import Header from '@/components/Header'
 import { formatDate } from '@/lib/utils'
-import { FileImage, Plus, Upload, X, Search, Filter, Trash2, Edit2, ExternalLink, History, MapPin, CheckCircle, Circle, MessageSquare, Clock } from 'lucide-react'
+import { FileImage, Plus, Upload, X, Search, Filter, Trash2, Edit2, ExternalLink, History, MapPin, CheckCircle, Circle, MessageSquare, Clock, Box, ChevronDown } from 'lucide-react'
 
-const DRAWING_TYPES = ['平面図', '立面図', '断面図', '配置図', '詳細図', '設備図', '電気図', '構造図', '施工図', '竣工図', 'その他']
+const DRAWING_TYPES = ['平面図', '立面図', '断面図', '配置図', '詳細図', '設備図', '電気図', '構造図', '施工図', '竣工図', 'BIMモデル', '3Dモデル', 'CIMモデル', 'その他']
+
+const BIM_EXTENSIONS = ['.ifc', '.rvt', '.dwg', '.dxf', '.nwd', '.fbx']
+const BIM_VIEWERS = [
+  { name: 'IFC.js Viewer（無料）', url: 'https://ifcjs.github.io/web-ifc-viewer/example/index.html' },
+  { name: 'xeokit (xeoglBIM)', url: 'https://xeokit.io/demo.html' },
+  { name: 'Autodesk Viewer', url: 'https://viewer.autodesk.com/' },
+]
 
 interface Drawing {
   id: string
@@ -16,6 +23,8 @@ interface Drawing {
   version: number
   isLatest: boolean
   filePath: string
+  fileType?: string | null
+  isBim?: boolean
   description?: string | null
   createdAt: string
   uploader: { name: string }
@@ -57,7 +66,8 @@ export default function DrawingsPage() {
   const [form, setForm] = useState(defaultForm)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
-  const [uploadedFile, setUploadedFile] = useState<{ path: string; name: string } | null>(null)
+  const [uploadedFile, setUploadedFile] = useState<{ path: string; name: string; isBim: boolean } | null>(null)
+  const [bimViewerOpen, setBimViewerOpen] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [projectFilter, setProjectFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
@@ -183,7 +193,7 @@ export default function DrawingsPage() {
       const res = await fetch('/api/upload', { method: 'POST', body: fd })
       if (res.ok) {
         const data = await res.json()
-        setUploadedFile({ path: data.path, name: file.name })
+        setUploadedFile({ path: data.path, name: file.name, isBim: isBimFile(file.name) })
       }
     } finally {
       setUploading(false)
@@ -226,7 +236,7 @@ export default function DrawingsPage() {
         const res = await fetch('/api/drawings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...form, filePath: uploadedFile!.path }),
+          body: JSON.stringify({ ...form, filePath: uploadedFile!.path, isBim: uploadedFile!.isBim }),
         })
         if (res.ok) { await refetch(); setShowModal(false) }
       }
@@ -347,6 +357,7 @@ export default function DrawingsPage() {
 
   const isImage = (path: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(path)
   const isPdf = (path: string) => /\.pdf$/i.test(path)
+  const isBimFile = (path: string) => BIM_EXTENSIONS.some(ext => path.toLowerCase().endsWith(ext))
 
   const unresolvedCount = pins.filter(p => !p.resolvedAt).length
 
@@ -354,6 +365,12 @@ export default function DrawingsPage() {
     <div>
       <Header title="図面管理" />
       <div className="p-6">
+        {/* BIM/CIM Banner */}
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4 text-sm">
+          <p className="font-semibold text-purple-800">BIM/CIM対応</p>
+          <p className="text-purple-700">IFC・Revit・DWG形式のBIMファイルをアップロード可能です。外部ビューアと連携して3D閲覧ができます。</p>
+        </div>
+
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-3 mb-6">
           <div className="relative flex-1 min-w-48">
@@ -424,8 +441,14 @@ export default function DrawingsPage() {
                     <img src={drawing.filePath} alt={drawing.name} className="w-full h-full object-cover" />
                   ) : (
                     <div className="flex flex-col items-center gap-2">
-                      <FileImage className="w-12 h-12 text-slate-300" />
-                      <span className="text-xs text-slate-400">{isPdf(drawing.filePath) ? 'PDF' : 'ファイル'}</span>
+                      {(drawing.isBim || isBimFile(drawing.filePath)) ? (
+                        <Box className="w-12 h-12 text-purple-300" />
+                      ) : (
+                        <FileImage className="w-12 h-12 text-slate-300" />
+                      )}
+                      <span className="text-xs text-slate-400">
+                        {isPdf(drawing.filePath) ? 'PDF' : (drawing.isBim || isBimFile(drawing.filePath)) ? 'BIM' : 'ファイル'}
+                      </span>
                     </div>
                   )}
                   {!drawing.isLatest && (
@@ -435,6 +458,11 @@ export default function DrawingsPage() {
                   )}
                   {drawing.isLatest && (
                     <div className="absolute top-2 left-2 bg-blue-600 text-white text-xs px-2 py-0.5 rounded-full">最新</div>
+                  )}
+                  {(drawing.isBim || isBimFile(drawing.filePath)) && (
+                    <div className="absolute bottom-2 left-2 bg-purple-600 text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Box className="w-3 h-3" /> BIM
+                    </div>
                   )}
                   <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                     <a
@@ -490,6 +518,33 @@ export default function DrawingsPage() {
                   >
                     <History className="w-3 h-3" /> バージョン履歴
                   </Link>
+                  {(drawing.isBim || isBimFile(drawing.filePath)) && (
+                    <div className="relative mt-2">
+                      <button
+                        onClick={e => { e.stopPropagation(); setBimViewerOpen(bimViewerOpen === drawing.id ? null : drawing.id) }}
+                        className="flex items-center gap-1 text-xs bg-purple-100 text-purple-700 hover:bg-purple-200 px-2 py-1 rounded font-medium"
+                      >
+                        <Box className="w-3 h-3" /> 3Dビューアで開く <ChevronDown className="w-3 h-3" />
+                      </button>
+                      {bimViewerOpen === drawing.id && (
+                        <div className="absolute left-0 top-full mt-1 z-20 bg-white border border-slate-200 rounded-lg shadow-lg min-w-48" onClick={e => e.stopPropagation()}>
+                          {BIM_VIEWERS.map(viewer => (
+                            <a
+                              key={viewer.url}
+                              href={viewer.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-purple-50 hover:text-purple-700 first:rounded-t-lg last:rounded-b-lg"
+                              onClick={() => setBimViewerOpen(null)}
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              {viewer.name}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -782,7 +837,7 @@ export default function DrawingsPage() {
                               </>
                             )}
                           </div>
-                          <input ref={versionFileRef} type="file" onChange={handleVersionFileUpload} accept=".pdf,.jpg,.jpeg,.png,.gif,.webp" className="hidden" />
+                          <input ref={versionFileRef} type="file" onChange={handleVersionFileUpload} accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.ifc,.rvt,.dwg,.dxf,.nwd,.fbx" className="hidden" />
                           <textarea
                             value={versionNotes}
                             onChange={e => setVersionNotes(e.target.value)}
@@ -933,11 +988,17 @@ export default function DrawingsPage() {
                       <>
                         <Upload className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                         <p className="text-sm text-slate-500">クリックしてファイルを選択</p>
-                        <p className="text-xs text-slate-400 mt-1">PDF, 画像ファイル対応</p>
+                        <p className="text-xs text-slate-400 mt-1">PDF, 画像, BIM（IFC・RVT・DWG・DXF）対応</p>
                       </>
                     )}
                   </div>
-                  <input ref={fileRef} type="file" onChange={handleFileUpload} accept=".pdf,.jpg,.jpeg,.png,.gif,.webp" className="hidden" />
+                  {uploadedFile?.isBim && (
+                    <div className="mt-2 flex items-center gap-1.5 text-xs text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-3 py-1.5">
+                      <Box className="w-3.5 h-3.5" />
+                      BIMファイルとして登録されます
+                    </div>
+                  )}
+                  <input ref={fileRef} type="file" onChange={handleFileUpload} accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.ifc,.rvt,.dwg,.dxf,.nwd,.fbx" className="hidden" />
                 </div>
               )}
               <div className="flex gap-3 pt-2">

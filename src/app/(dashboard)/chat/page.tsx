@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { formatDateTime } from '@/lib/utils'
-import { Send, Plus, X, Trash2, Camera, Folder, Bell, Settings, MessageSquare, AtSign, Paperclip, FileText, Image as ImageIcon, Pencil, Smile, Check } from 'lucide-react'
+import { Send, Plus, X, Trash2, Camera, Folder, Bell, Settings, MessageSquare, AtSign, Paperclip, FileText, Image as ImageIcon, Pencil, Smile, Check, Video } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 
 interface ChatReaction {
@@ -39,6 +39,26 @@ interface ChatRoom {
   project: { id: string; name: string; projectNumber: string }
   messages: ChatMessage[]
   unreadCount?: number
+}
+
+interface MeetingLink {
+  id: string
+  type: 'google-meet' | 'jitsi' | 'zoom'
+  url: string
+  title: string
+  createdAt: string
+}
+
+function generateJitsiRoom(): string {
+  const words = ['建設', '工事', '現場', '会議', '報告', '協議', '打合']
+  const random = Math.random().toString(36).substring(2, 8)
+  return `BuildSync-${words[Math.floor(Math.random() * words.length)]}-${random}`
+}
+
+function generateGoogleMeetId(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz'
+  const seg = () => Array.from({ length: 3 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+  return `${seg()}-${seg()}-${seg()}`
 }
 
 const COMMON_EMOJIS = ['👍', '❤️', '😄', '🎉', '👀', '🙏']
@@ -108,6 +128,12 @@ export default function ChatPage() {
 
   // Message action menu state
   const [actionMenuMsgId, setActionMenuMsgId] = useState<string | null>(null)
+
+  // Video meeting modal state
+  const [showMeetModal, setShowMeetModal] = useState(false)
+  const [meetTitle, setMeetTitle] = useState('')
+  const [meetType, setMeetType] = useState<'google-meet' | 'jitsi' | 'zoom'>('jitsi')
+  const [zoomUrl, setZoomUrl] = useState('')
 
   const currentUserId = (session?.user as any)?.id as string | undefined
 
@@ -353,6 +379,56 @@ export default function ChatPage() {
   const mentionUsers = allUsers.filter(u =>
     mentionQuery === '' || u.name.includes(mentionQuery)
   ).slice(0, 5)
+
+  const openMeetModal = () => {
+    const now = new Date()
+    const dateStr = now.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-')
+    const timeStr = now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
+    setMeetTitle(`BuildSync会議 ${dateStr} ${timeStr}`)
+    setMeetType('jitsi')
+    setZoomUrl('')
+    setShowMeetModal(true)
+  }
+
+  const sendMeetingLink = async () => {
+    if (!selectedRoom) return
+    let url = ''
+    if (meetType === 'google-meet') {
+      const meetId = generateGoogleMeetId()
+      url = `https://meet.google.com/${meetId}`
+    } else if (meetType === 'jitsi') {
+      const room = generateJitsiRoom()
+      url = `https://meet.jit.si/${encodeURIComponent(room)}`
+    } else {
+      if (!zoomUrl.trim()) return
+      url = zoomUrl.trim()
+    }
+    const content = `📹 ビデオ会議: ${meetTitle}\n${url}`
+    setShowMeetModal(false)
+    setSending(true)
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'message',
+          roomId: selectedRoom.id,
+          content,
+          fileUrl: null,
+          fileName: null,
+          fileSize: null,
+          parentId: null,
+        }),
+      })
+      if (res.ok) {
+        const msg = await res.json()
+        setRooms((prev) => prev.map((r) => r.id === selectedRoom.id ? { ...r, messages: [...r.messages, msg] } : r))
+        setSelectedRoom((prev) => prev ? { ...prev, messages: [...prev.messages, msg] } : prev)
+      }
+    } finally {
+      setSending(false)
+    }
+  }
 
   const markAsRead = async (roomId: string) => {
     try {
@@ -616,8 +692,10 @@ export default function ChatPage() {
                                     </button>
                                   </div>
                                 ) : (
-                                  <div className={`px-3 py-2 rounded-xl text-sm leading-relaxed whitespace-pre-wrap ${
-                                    isMe ? 'bg-blue-600 text-white rounded-tr-sm' : 'bg-white text-slate-800 shadow-sm rounded-tl-sm'
+                                  <div className={`text-sm leading-relaxed ${
+                                    msg.content.startsWith('📹 ビデオ会議:')
+                                      ? ''
+                                      : `px-3 py-2 rounded-xl whitespace-pre-wrap ${isMe ? 'bg-blue-600 text-white rounded-tr-sm' : 'bg-white text-slate-800 shadow-sm rounded-tl-sm'}`
                                   }`}>
                                     {msg.fileUrl && isImage(msg.fileUrl) ? (
                                       <div className="space-y-1">
@@ -644,6 +722,32 @@ export default function ChatPage() {
                                           <p>{msg.content}</p>
                                         )}
                                       </div>
+                                    ) : msg.content.startsWith('📹 ビデオ会議:') ? (
+                                      (() => {
+                                        const lines = msg.content.split('\n')
+                                        const title = lines[0].replace('📹 ビデオ会議:', '').trim()
+                                        const url = lines[1] || ''
+                                        return (
+                                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 min-w-[220px]">
+                                            <div className="flex items-center gap-2 mb-1">
+                                              <Video className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                                              <span className="text-sm font-semibold text-blue-800">ビデオ会議</span>
+                                            </div>
+                                            <p className="text-xs text-slate-700 mb-2 font-medium">{title}</p>
+                                            {url && (
+                                              <a
+                                                href={url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-3 py-1.5 rounded-md transition-colors"
+                                              >
+                                                <Video className="w-3 h-3" />
+                                                会議に参加
+                                              </a>
+                                            )}
+                                          </div>
+                                        )
+                                      })()
                                     ) : (
                                       msg.content.split(/(@\S+)/g).map((part, idx) =>
                                         part.startsWith('@') ? (
@@ -748,6 +852,13 @@ export default function ChatPage() {
                   className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white"
                 />
                 <button
+                  onClick={openMeetModal}
+                  title="ビデオ会議リンクを生成"
+                  className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-slate-300"
+                >
+                  <Video className="w-4 h-4" />
+                </button>
+                <button
                   onClick={sendMessage}
                   disabled={sending || uploading || (!message.trim() && !pendingFile)}
                   className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white p-2 rounded-lg transition-colors"
@@ -823,6 +934,87 @@ export default function ChatPage() {
                 <button type="button" onClick={() => setShowNewRoom(false)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg text-sm font-medium">キャンセル</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Video Meeting Modal */}
+      {showMeetModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Video className="w-5 h-5 text-blue-600" />
+                <h2 className="font-semibold text-slate-900">ビデオ会議リンクを生成</h2>
+              </div>
+              <button onClick={() => setShowMeetModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">会議タイトル</label>
+                <input
+                  type="text"
+                  value={meetTitle}
+                  onChange={(e) => setMeetTitle(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">サービスを選択</label>
+                <div className="space-y-2">
+                  {([
+                    { value: 'jitsi', label: 'Jitsi（無料・ランダムルーム）', desc: 'meet.jit.si を使用' },
+                    { value: 'google-meet', label: 'Google Meet', desc: 'meet.google.com を使用' },
+                    { value: 'zoom', label: 'Zoom', desc: 'Zoom会議URLを入力' },
+                  ] as const).map(({ value, label, desc }) => (
+                    <label key={value} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${meetType === value ? 'border-blue-400 bg-blue-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                      <input
+                        type="radio"
+                        name="meetType"
+                        value={value}
+                        checked={meetType === value}
+                        onChange={() => setMeetType(value)}
+                        className="mt-0.5"
+                      />
+                      <div>
+                        <p className="text-sm font-medium text-slate-800">{label}</p>
+                        <p className="text-xs text-slate-500">{desc}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {meetType === 'zoom' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Zoom会議URL</label>
+                  <input
+                    type="url"
+                    value={zoomUrl}
+                    onChange={(e) => setZoomUrl(e.target.value)}
+                    placeholder="https://zoom.us/j/..."
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={sendMeetingLink}
+                  disabled={sending || !meetTitle.trim() || (meetType === 'zoom' && !zoomUrl.trim())}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  リンクを生成してチャットに送信
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowMeetModal(false)}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-2 rounded-lg text-sm font-medium"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

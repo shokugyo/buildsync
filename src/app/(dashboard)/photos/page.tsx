@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import Header from '@/components/Header'
+import BlackboardModal, { BlackboardData } from '@/components/Blackboard'
 import { formatDate } from '@/lib/utils'
 import {
   Camera, Plus, Filter, X, Upload, ZoomIn, Edit2, Trash2, Eye,
@@ -251,6 +252,46 @@ export default function PhotosPage() {
   const [bbBui, setBbBui] = useState('')
   const [bbTachiaisha, setBbTachiaisha] = useState('')
   const [bbBikou, setBbBikou] = useState('')
+
+  // 電子小黒板モーダル (Blackboard component)
+  const [blackboardShowId, setBlackboardShowId] = useState<string | null>(null)
+  const blackboardShowPhoto = blackboardShowId ? photos.find((p) => p.id === blackboardShowId) ?? null : null
+
+  const getBlackboardInitialData = (photo: Photo | null): BlackboardData => {
+    if (!photo) return { projectName: '', date: new Date().toISOString().slice(0, 16), location: '', photographer: '', note: '' }
+    try {
+      const bd = JSON.parse(photo.blackboardData || '{}')
+      return {
+        projectName: bd.projectName ?? photo.project?.name ?? '',
+        date: bd.date ?? new Date(photo.createdAt).toISOString().slice(0, 16),
+        location: bd.location ?? photo.location ?? '',
+        photographer: bd.photographer ?? photo.uploader?.name ?? '',
+        note: bd.note ?? '',
+      }
+    } catch {
+      return {
+        projectName: photo.project?.name ?? '',
+        date: new Date(photo.createdAt).toISOString().slice(0, 16),
+        location: photo.location ?? '',
+        photographer: photo.uploader?.name ?? '',
+        note: '',
+      }
+    }
+  }
+
+  const handleBlackboardSave = async (data: BlackboardData) => {
+    if (!blackboardShowId) return
+    const res = await fetch(`/api/photos/${blackboardShowId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blackboardData: JSON.stringify(data) }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setPhotos((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
+    }
+    setBlackboardShowId(null)
+  }
 
   useEffect(() => {
     Promise.all([
@@ -733,6 +774,14 @@ export default function PhotosPage() {
             {isSelected && <span className="text-white text-[10px] leading-none font-bold">✓</span>}
           </div>
         </div>
+        {/* 黒板ボタン */}
+        <button
+          className="absolute bottom-1 left-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-green-700/80 hover:bg-green-800 text-white text-[9px] font-bold px-1 py-0.5 rounded leading-none"
+          onClick={(e) => { e.stopPropagation(); setBlackboardShowId(photo.id) }}
+          title="電子小黒板"
+        >
+          🪧
+        </button>
         <p className="text-[10px] text-slate-500 mt-0.5 truncate" style={{ width: size === 'compact' ? 90 : 100 }}>
           {new Date(photo.createdAt).toLocaleDateString('ja-JP', { month: '2-digit', day: '2-digit' })}
         </p>
@@ -1472,6 +1521,15 @@ export default function PhotosPage() {
             </p>
           </div>
         </div>
+      )}
+
+      {/* 電子小黒板モーダル (Blackboard component) */}
+      {blackboardShowId && blackboardShowPhoto && (
+        <BlackboardModal
+          data={getBlackboardInitialData(blackboardShowPhoto)}
+          onSave={handleBlackboardSave}
+          onClose={() => setBlackboardShowId(null)}
+        />
       )}
     </div>
   )

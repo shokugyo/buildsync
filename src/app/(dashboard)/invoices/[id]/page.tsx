@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/Header'
 import { formatDate, formatCurrency } from '@/lib/utils'
-import { ArrowLeft, Printer, CheckCircle, XCircle, Clock, AlertCircle, CreditCard } from 'lucide-react'
+import { ArrowLeft, Printer, CheckCircle, XCircle, Clock, AlertCircle, CreditCard, ShieldCheck, ShieldAlert, ShieldOff } from 'lucide-react'
 
 interface InvoiceItem {
   id: string
@@ -62,6 +62,17 @@ export default function InvoiceDetailPage() {
   const [paymentNotes, setPaymentNotes] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // 電子帳簿保存法
+  const [sealLoading, setSealLoading] = useState(false)
+  const [verifyLoading, setVerifyLoading] = useState(false)
+  const [sealResult, setSealResult] = useState<{ hash: string; createdAt: string } | null>(null)
+  const [verifyResult, setVerifyResult] = useState<
+    | { verified: true; hash: string; createdAt: string }
+    | { verified: false; storedHash: string; currentHash: string }
+    | { verified: null; message: string }
+    | null
+  >(null)
+
   useEffect(() => {
     fetch(`/api/invoices/${params.id}`)
       .then(r => r.json())
@@ -106,6 +117,42 @@ export default function InvoiceDetailPage() {
       setInvoice(updated)
     }
     setSaving(false)
+  }
+
+  const handleSeal = async () => {
+    if (!invoice) return
+    setSealLoading(true)
+    setVerifyResult(null)
+    setSealResult(null)
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/seal`, { method: 'POST' })
+      if (res.ok) {
+        const data = await res.json()
+        setSealResult(data)
+      } else {
+        alert('シールに失敗しました')
+      }
+    } finally {
+      setSealLoading(false)
+    }
+  }
+
+  const handleVerify = async () => {
+    if (!invoice) return
+    setVerifyLoading(true)
+    setSealResult(null)
+    setVerifyResult(null)
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/verify`)
+      if (res.ok) {
+        const data = await res.json()
+        setVerifyResult(data)
+      } else {
+        alert('検証に失敗しました')
+      }
+    } finally {
+      setVerifyLoading(false)
+    }
   }
 
   if (loading) return <div className="p-8 text-center">読み込み中...</div>
@@ -264,6 +311,70 @@ export default function InvoiceDetailPage() {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* 電子帳簿保存法対応 */}
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <h3 className="font-semibold mb-1">電子帳簿保存法対応</h3>
+          <p className="text-xs text-slate-500 mb-4">請求書データのSHA-256ハッシュを記録し、改ざん検知に対応します</p>
+          <div className="flex flex-wrap gap-2 mb-4">
+            <button
+              onClick={handleSeal}
+              disabled={sealLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              {sealLoading ? '処理中...' : 'シール（ハッシュ登録）'}
+            </button>
+            <button
+              onClick={handleVerify}
+              disabled={verifyLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 text-slate-700 rounded-lg text-sm hover:bg-slate-50 disabled:opacity-50"
+            >
+              <ShieldAlert className="w-4 h-4" />
+              {verifyLoading ? '検証中...' : '改ざん検知チェック'}
+            </button>
+          </div>
+          {sealResult && (
+            <div className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg text-sm">
+              <ShieldCheck className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-blue-800">ハッシュを登録しました</p>
+                <p className="text-blue-600 font-mono text-xs mt-0.5 break-all">{sealResult.hash}</p>
+                <p className="text-blue-500 text-xs mt-0.5">登録日時: {new Date(sealResult.createdAt).toLocaleString('ja-JP')}</p>
+              </div>
+            </div>
+          )}
+          {verifyResult !== null && (
+            <>
+              {verifyResult.verified === true && (
+                <div className="flex items-start gap-2 p-3 bg-emerald-50 rounded-lg text-sm">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-emerald-800">正常（改ざんなし）</p>
+                    <p className="text-emerald-600 font-mono text-xs mt-0.5 break-all">{verifyResult.hash}</p>
+                    <p className="text-emerald-500 text-xs mt-0.5">シール日時: {new Date(verifyResult.createdAt).toLocaleString('ja-JP')}</p>
+                  </div>
+                </div>
+              )}
+              {verifyResult.verified === false && (
+                <div className="flex items-start gap-2 p-3 bg-red-50 rounded-lg text-sm">
+                  <ShieldAlert className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-red-800">改ざん検知</p>
+                    <p className="text-xs text-red-600 mt-0.5">登録済ハッシュ: <span className="font-mono break-all">{verifyResult.storedHash}</span></p>
+                    <p className="text-xs text-red-600 mt-0.5">現在のハッシュ: <span className="font-mono break-all">{verifyResult.currentHash}</span></p>
+                  </div>
+                </div>
+              )}
+              {verifyResult.verified === null && (
+                <div className="flex items-start gap-2 p-3 bg-slate-50 rounded-lg text-sm">
+                  <ShieldOff className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-slate-600">未登録 — まだシールされていません</p>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
 

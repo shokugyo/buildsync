@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Header from '@/components/Header'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Download, FileJson, FileText, AlertTriangle } from 'lucide-react'
+import { Download, FileJson, FileText, AlertTriangle, ShieldCheck } from 'lucide-react'
 
 const LEFT_MENU = [
   { label: 'プロフィール情報', href: '/settings' },
@@ -34,6 +34,11 @@ interface Counts {
   invoices: number
   schedules: number
   attendance: number
+}
+
+interface DocHashCounts {
+  total: number
+  byType: { invoice: number; order: number }
 }
 
 const CSV_EXPORTS = [
@@ -66,6 +71,7 @@ export default function DataExportPage() {
   const [selectedTargets, setSelectedTargets] = useState<Set<string>>(new Set())
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [deleteInput, setDeleteInput] = useState('')
+  const [docHashCounts, setDocHashCounts] = useState<DocHashCounts | null>(null)
 
   useEffect(() => {
     const stored = localStorage.getItem('buildsync_last_export')
@@ -96,6 +102,11 @@ export default function DataExportPage() {
       }
     }
     fetchCounts()
+
+    fetch('/api/document-hashes/count')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setDocHashCounts(data) })
+      .catch(() => {})
   }, [])
 
   const handleFullExport = async () => {
@@ -354,6 +365,44 @@ export default function DataExportPage() {
               </a>
             </div>
             <p className="text-xs text-slate-500">発注・請求データを会計ソフト取込用CSVで出力します</p>
+          </div>
+
+          {/* 電子帳簿保存法対応 */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5 mb-5">
+            <h3 className="font-semibold text-slate-900 flex items-center gap-2 mb-1">
+              <ShieldCheck className="w-5 h-5 text-emerald-600" />
+              電子帳簿保存法対応
+            </h3>
+            <p className="text-sm text-slate-500 mb-4">
+              電子帳簿保存法に基づき、請求書・発注書のハッシュ値を記録し改ざん検知に対応しています
+            </p>
+            {docHashCounts ? (
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-emerald-50 rounded-lg px-4 py-3">
+                  <p className="text-xs text-emerald-600 font-medium">合計</p>
+                  <p className="text-2xl font-bold text-emerald-800">
+                    {docHashCounts.total}
+                    <span className="text-sm font-normal text-emerald-600 ml-1">件</span>
+                  </p>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-4 py-3">
+                  <p className="text-xs text-slate-500">請求書</p>
+                  <p className="text-2xl font-bold text-slate-800">
+                    {docHashCounts.byType.invoice}
+                    <span className="text-sm font-normal text-slate-400 ml-1">件</span>
+                  </p>
+                </div>
+                <div className="bg-slate-50 rounded-lg px-4 py-3">
+                  <p className="text-xs text-slate-500">発注書</p>
+                  <p className="text-2xl font-bold text-slate-800">
+                    {docHashCounts.byType.order}
+                    <span className="text-sm font-normal text-slate-400 ml-1">件</span>
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">読み込み中...</p>
+            )}
           </div>
 
           {/* 危険ゾーン */}

@@ -188,7 +188,7 @@ export default function ReportsPage() {
       <Header title="社内報告管理" />
       <div className="p-6">
         {/* Tabs */}
-        <div className="flex gap-0 border-b border-slate-200 mb-4">
+        <div className="flex items-center gap-0 border-b border-slate-200 mb-4">
           {REPORT_TABS.map(tab => (
             <button
               key={tab}
@@ -200,6 +200,13 @@ export default function ReportsPage() {
               {tab}
             </button>
           ))}
+          <Link
+            href="/reports/custom-builder"
+            className="ml-auto flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-purple-600 hover:text-purple-700 border border-purple-200 hover:bg-purple-50 rounded-lg transition-colors"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            カスタムレポート
+          </Link>
         </div>
 
         {/* 一括出力タブコンテンツ */}
