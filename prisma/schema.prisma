@@ -1,0 +1,1706 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id                    String                @id @default(cuid())
+  name                  String
+  kanaName              String?
+  type                  String                @default("元請")
+  url                   String?
+  postalCode            String?
+  prefecture            String?
+  address               String?
+  address1              String?
+  address2              String?
+  representativeName    String?
+  phone                 String?
+  email                 String?
+  logoPath              String?
+  constructionImagePath String?
+  registrationNumber    String?
+  logoUrl               String?
+  sealUrl               String?
+  bankName              String?
+  bankBranch            String?
+  bankAccountType       String?
+  bankAccountNumber     String?
+  bankAccountName       String?
+  defaultPaymentTerms   Int                   @default(30)
+  plan                  String                @default("Basic")
+  createdAt             DateTime              @default(now())
+  users                 User[]
+  projects              Project[]
+  orders                Order[]
+  invoices              Invoice[]
+  afterServiceRecords   AfterServiceRecord[]
+  departments           Department[]
+  webhookConfigs        WebhookConfig[]
+  apiKeys               ApiKey[]
+  safetyPatrols         SafetyPatrol[]
+  supplierEvaluations   SupplierEvaluation[]
+  budgets               Budget[]
+  workerRosters         WorkerRoster[]
+  subcontractorNotices  SubcontractorNotice[]
+  materials             Material[]
+  materialOrders        MaterialOrder[]
+  equipments            Equipment[]
+  documentFolders       DocumentFolder[]
+  documents             Document[]
+  taxRates              TaxRate[]
+  constructionLedgers   ConstructionLedger[]
+  ipRestrictions        IpRestriction[]
+  emailTemplates        EmailTemplate[]
+  projectTemplates      ProjectTemplate[]
+  workOrders            WorkOrder[]
+  customerSurveys       CustomerSurvey[]
+  siteDiaries           SiteDiary[]
+  projectCompletions    ProjectCompletion[]
+  estimateTemplates     EstimateTemplate[]
+  invitations           Invitation[]
+  completionDocuments   CompletionDocument[]
+  workerCertifications  WorkerCertification[]
+  safetyEducations      SafetyEducation[]
+  materialMasters       MaterialMaster[]
+  expenses              Expense[]
+  costCategories        CostCategory[]
+  monthlyAttendanceLocks MonthlyAttendanceLock[]
+  announcements          Announcement[]         @relation("AnnouncementCompany")
+  advancePayments       AdvancePayment[]
+  leaveRequests         LeaveRequest[]
+  shifts                Shift[]
+  tasks                 Task[]
+  projectRisks          ProjectRisk[]
+  milestones            Milestone[]
+  vehicles              Vehicle[]
+  tools                 Tool[]
+  departmentBudgets     DepartmentBudget[]
+  insurances            Insurance[]
+  inquiries             Inquiry[]
+  contracts             Contract[]
+  warranties            Warranty[]
+  reportSchedules       ReportSchedule[]
+  bids                  Bid[]
+}
+
+model User {
+  id                  String               @id @default(cuid())
+  email               String               @unique
+  password            String
+  name                String
+  role                String               @default("一般")
+  status              String               @default("有効")
+  companyId           String
+  company             Company              @relation(fields: [companyId], references: [id])
+  createdAt           DateTime             @default(now())
+  jobType             String?
+  department          String?
+  phone               String?
+  notifyEmail         String?
+  avatarPath          String?
+  showAvatar          Boolean              @default(false)
+  googleCalendarUrl   String?
+  failedLoginAttempts Int                  @default(0)
+  lockedUntil         DateTime?
+  totpSecret          String?
+  totpEnabled         Boolean              @default(false)
+  totpBackupCodes     String?
+  managedProjects     Project[]            @relation("Manager")
+  salesProjects       Project[]            @relation("Sales")
+  projectMemberships  ProjectMember[]
+  schedules           Schedule[]
+  photos              Photo[]
+  messages            ChatMessage[]
+  chatReactions       ChatReaction[]       @relation("ChatReactionUser")
+  inspections         Inspection[]
+  reports             DailyReport[]
+  workReports         WorkReport[]
+  approvedWorkReports WorkReport[]         @relation("WorkReportApprover")
+  defects             Defect[]
+  notifications       Notification[]
+  drawings            Drawing[]
+  documents           Document[]           @relation("DocumentUploader")
+  drawingPins         DrawingPin[]         @relation("DrawingPinAuthor")
+  drawingVersions     DrawingVersion[]     @relation("DrawingVersionUploader")
+  paymentRecords      PaymentRecord[]      @relation("PaymentRecorder")
+  leads               Lead[]
+  nearMisses          NearMiss[]
+  leadActivities      LeadActivity[]       @relation("LeadActivityUser")
+  safetyPatrols       SafetyPatrol[]       @relation("SafetyPatrolUser")
+  supplierEvaluations SupplierEvaluation[] @relation("SupplierEvaluator")
+  preference          UserPreference?
+  assignedWorkOrders  WorkOrder[]          @relation("WorkOrderAssignee")
+  hourlyRate              Float                @default(2000)
+  paidLeaveDays           Float                @default(10)
+  siteDiaries             SiteDiary[]          @relation("SiteDiaryAuthor")
+  completionDocuments     CompletionDocument[] @relation("CompletionDocUploader")
+  workerCertifications    WorkerCertification[] @relation("WorkerCert")
+  submittedExpenses       Expense[]            @relation("ExpenseSubmitter")
+  approvedExpenses        Expense[]            @relation("ExpenseApprover")
+  attendanceLocks         MonthlyAttendanceLock[] @relation("AttendanceLockUser")
+  announcements           Announcement[]          @relation("AnnouncementAuthor")
+  requestedAdvances       AdvancePayment[]     @relation("AdvanceRequester")
+  approvedAdvances        AdvancePayment[]     @relation("AdvanceApprover")
+  leaveRequests           LeaveRequest[]       @relation("LeaveRequester")
+  approvedLeaves          LeaveRequest[]       @relation("LeaveApprover")
+  shifts                  Shift[]              @relation("ShiftUser")
+  assignedTasks           Task[]               @relation("TaskAssignee")
+  createdTasks            Task[]               @relation("TaskCreator")
+  drivenVehicles          Vehicle[]            @relation("VehicleDriver")
+  assignedInquiries       Inquiry[]            @relation("InquiryAssignee")
+  managedDepts            Department[]         @relation("DeptManager")
+  orderApprovals          OrderApproval[]      @relation("OrderApprover")
+}
+
+model Customer {
+  id                  String               @id @default(cuid())
+  name                String
+  type                String               @default("個人")
+  deletedAt           DateTime?
+  address             String?
+  phone               String?
+  email               String?
+  companyId           String
+  createdAt           DateTime             @default(now())
+  projects            Project[]
+  invoices            Invoice[]
+  leads               Lead[]
+  afterServiceRecords AfterServiceRecord[]
+  customerSurveys     CustomerSurvey[]
+  inquiries           Inquiry[]
+  contracts           Contract[]
+  shareTokens         ProjectShareToken[]
+}
+
+model Project {
+  id                   String                @id @default(cuid())
+  projectNumber        String                @unique
+  name                 String
+  status               String                @default("引合")
+  deletedAt            DateTime?
+  customerId           String?
+  customer             Customer?             @relation(fields: [customerId], references: [id])
+  address              String?
+  workType             String?
+  managerId            String?
+  manager              User?                 @relation("Manager", fields: [managerId], references: [id])
+  salesId              String?
+  sales                User?                 @relation("Sales", fields: [salesId], references: [id])
+  contractAmount       Float?
+  estimatedCost        Float?
+  startDate            DateTime?
+  endDate              DateTime?
+  deliveryDate         DateTime?
+  notes                String?
+  cautions             String?
+  siteEmergencyContact String?
+  siteEmergencyPhone   String?
+  lat                  Float?
+  lng                  Float?
+  propertyType         String?
+  propertyName         String?
+  propertyNameKana     String?
+  ridgepoleDate        DateTime?
+  labels               String?
+  companyId            String
+  company              Company               @relation(fields: [companyId], references: [id])
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  schedules            Schedule[]
+  photos               Photo[]
+  chatRooms            ChatRoom[]
+  inspections          Inspection[]
+  orders               Order[]
+  invoices             Invoice[]
+  budgets              Budget[]
+  reports              DailyReport[]
+  workReports          WorkReport[]
+  defects              Defect[]
+  drawings             Drawing[]
+  documents            Document[]
+  documentFolders      DocumentFolder[]
+  constructionLedgers  ConstructionLedger[]
+  estimates            Estimate[]
+  attendances          WorkerAttendance[]
+  members              ProjectMember[]
+  shareTokens          ProjectShareToken[]
+  kyActivities         KyActivity[]
+  nearMisses           NearMiss[]
+  afterServiceRecords  AfterServiceRecord[]
+  safetyPatrols        SafetyPatrol[]
+  supplierEvaluations  SupplierEvaluation[]
+  workerRosters        WorkerRoster[]
+  subcontractorNotices SubcontractorNotice[]
+  materials            Material[]
+  materialOrders       MaterialOrder[]
+  equipments           Equipment[]
+  WorkOrder            WorkOrder[]
+  customerSurveys      CustomerSurvey[]
+  shifts               Shift[]
+  siteDiaries          SiteDiary[]
+  completion           ProjectCompletion?
+  completionDocuments  CompletionDocument[]
+  safetyEducations     SafetyEducation[]
+  expenses             Expense[]
+  advancePayments      AdvancePayment[]
+  tasks                Task[]
+  projectRisks         ProjectRisk[]
+  milestones           Milestone[]
+  vehicles             Vehicle[]
+  tools                Tool[]
+  insurances           Insurance[]
+  inquiries            Inquiry[]
+  contracts            Contract[]
+  warranties           Warranty[]
+  bids                 Bid[]
+}
+
+model Schedule {
+  id           String               @id @default(cuid())
+  projectId    String
+  project      Project              @relation(fields: [projectId], references: [id])
+  name         String
+  startDate    DateTime
+  endDate      DateTime
+  actualStart  DateTime?
+  actualEnd    DateTime?
+  assigneeId   String?
+  assignee     User?                @relation(fields: [assigneeId], references: [id])
+  progress     Int                  @default(0)
+  status       String               @default("未着手")
+  category     String?
+  notes        String?
+  createdAt    DateTime             @default(now())
+  dependencies ScheduleDependency[] @relation("DependentSchedule")
+  successors   ScheduleDependency[] @relation("PredecessorSchedule")
+}
+
+model ScheduleDependency {
+  id            String   @id @default(cuid())
+  scheduleId    String
+  schedule      Schedule @relation("DependentSchedule", fields: [scheduleId], references: [id], onDelete: Cascade)
+  predecessorId String
+  predecessor   Schedule @relation("PredecessorSchedule", fields: [predecessorId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleId, predecessorId])
+}
+
+model SafetyPatrol {
+  id                 String   @id @default(cuid())
+  projectId          String
+  project            Project  @relation(fields: [projectId], references: [id])
+  patrolDate         DateTime
+  patrolledBy        String
+  patroller          User     @relation("SafetyPatrolUser", fields: [patrolledBy], references: [id])
+  checkItems         String // JSON: [{item: string, result: "良好"|"要改善"|"不適合", comment: string}]
+  overallResult      String   @default("良好")
+  correctionRequired Boolean  @default(false)
+  notes              String?
+  companyId          String
+  company            Company  @relation(fields: [companyId], references: [id])
+  createdAt          DateTime @default(now())
+}
+
+model Photo {
+  id             String   @id @default(cuid())
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id])
+  uploaderId     String
+  uploader       User     @relation(fields: [uploaderId], references: [id])
+  filePath       String
+  comment        String?
+  tags           String?
+  location       String?
+  shootingType   String?
+  blackboardData String?
+  latitude       Float?
+  longitude      Float?
+  is360          Boolean  @default(false)
+  category       String   @default("一般")
+  createdAt      DateTime @default(now())
+}
+
+model ChatRoom {
+  id        String        @id @default(cuid())
+  projectId String
+  project   Project       @relation(fields: [projectId], references: [id])
+  name      String
+  createdAt DateTime      @default(now())
+  messages  ChatMessage[]
+}
+
+model ChatMessage {
+  id             String            @id @default(cuid())
+  roomId         String
+  room           ChatRoom          @relation(fields: [roomId], references: [id])
+  senderId       String
+  sender         User              @relation(fields: [senderId], references: [id])
+  content        String
+  fileUrl        String?
+  fileName       String?
+  fileSize       Int?
+  attachmentUrl  String?
+  attachmentName String?
+  attachmentSize Int?
+  parentId       String?
+  createdAt      DateTime          @default(now())
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  readBy         ChatMessageRead[]
+  reactions      ChatReaction[]
+}
+
+model ChatReaction {
+  id        String      @id @default(cuid())
+  messageId String
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation("ChatReactionUser", fields: [userId], references: [id])
+  emoji     String
+  createdAt DateTime    @default(now())
+
+  @@unique([messageId, userId, emoji])
+}
+
+model ChatMessageRead {
+  id        String      @id @default(cuid())
+  messageId String
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  readAt    DateTime    @default(now())
+
+  @@unique([messageId, userId])
+}
+
+model Inspection {
+  id              String           @id @default(cuid())
+  projectId       String
+  project         Project          @relation(fields: [projectId], references: [id])
+  name            String
+  type            String
+  scheduledDate   DateTime?
+  actualDate      DateTime?
+  inspectorId     String?
+  inspector       User?            @relation(fields: [inspectorId], references: [id])
+  status          String           @default("未実施")
+  notes           String?
+  approvalStatus  String?
+  inspectionGroup String?
+  sentAt          DateTime?
+  hasCorrection   Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  items           InspectionItem[]
+  defects         Defect[]
+}
+
+model InspectionItem {
+  id           String     @id @default(cuid())
+  inspectionId String
+  inspection   Inspection @relation(fields: [inspectionId], references: [id])
+  name         String
+  result       String?
+  comment      String?
+  photoUrl     String?
+}
+
+model Defect {
+  id             String      @id @default(cuid())
+  inspectionId   String?
+  inspection     Inspection? @relation(fields: [inspectionId], references: [id])
+  projectId      String
+  project        Project     @relation(fields: [projectId], references: [id])
+  content        String
+  location       String?
+  assigneeId     String?
+  assignee       User?       @relation(fields: [assigneeId], references: [id])
+  dueDate        DateTime?
+  status         String      @default("未対応")
+  photoIds       String? // comma-separated photo IDs
+  beforePhotoIds String? // comma-separated photo IDs (是正前)
+  afterPhotoIds  String? // comma-separated photo IDs (是正後)
+  createdAt      DateTime    @default(now())
+}
+
+model Supplier {
+  id                String               @id @default(cuid())
+  name              String
+  type              String               @default("協力会社")
+  deletedAt         DateTime?
+  address           String?
+  phone             String?
+  email             String?
+  contact           String?
+  notes             String?
+  licenseNumber     String?
+  licenseType       String?
+  licenseExpiry     DateTime?
+  insuranceExpiry   DateTime?
+  bankName          String?
+  bankBranch        String?
+  bankAccountNumber String?
+  bankAccountName   String?
+  companyId         String
+  createdAt         DateTime             @default(now())
+  orders          Order[]
+  evaluations     SupplierEvaluation[]
+  materials       Material[]
+  materialMasters MaterialMaster[]
+}
+
+model Material {
+  id          String    @id @default(cuid())
+  name        String
+  unit        String
+  quantity    Float
+  unitPrice   Float?
+  supplierId  String?
+  supplier    Supplier? @relation(fields: [supplierId], references: [id])
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id])
+  scheduledAt DateTime?
+  deliveredAt DateTime?
+  status      String    @default("未発注")
+  notes       String?
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id])
+  createdAt   DateTime  @default(now())
+}
+
+model Equipment {
+  id               String    @id @default(cuid())
+  name             String
+  type             String
+  serialNumber     String?
+  status           String    @default("利用可能")
+  projectId        String?
+  project          Project?  @relation(fields: [projectId], references: [id])
+  assignedFrom     DateTime?
+  assignedTo       DateTime?
+  lastInspectedAt  DateTime?
+  nextInspectionAt DateTime?
+  notes            String?
+  companyId        String
+  company          Company   @relation(fields: [companyId], references: [id])
+  createdAt        DateTime  @default(now())
+}
+
+model SupplierEvaluation {
+  id            String   @id @default(cuid())
+  supplierId    String
+  supplier      Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  projectId     String?
+  project       Project? @relation(fields: [projectId], references: [id])
+  qualityScore  Int
+  costScore     Int
+  scheduleScore Int
+  safetyScore   Int
+  overallScore  Float
+  comment       String?
+  evaluatedBy   String
+  evaluator     User     @relation("SupplierEvaluator", fields: [evaluatedBy], references: [id])
+  evaluatedAt   DateTime
+  companyId     String
+  company       Company  @relation(fields: [companyId], references: [id])
+  createdAt     DateTime @default(now())
+}
+
+model Order {
+  id               String          @id @default(cuid())
+  projectId        String
+  project          Project         @relation(fields: [projectId], references: [id])
+  supplierId       String?
+  supplier         Supplier?       @relation(fields: [supplierId], references: [id])
+  orderNumber      String          @unique
+  subject          String
+  workType         String?
+  orderDate        DateTime?
+  deliveryDate     DateTime?
+  paymentTerms     String?
+  amount           Float
+  taxAmount        Float
+  totalAmount      Float
+  status           String          @default("下書き")
+  notes            String?
+  confirmedAt      DateTime?
+  confirmedBy      String?
+  confirmationNote String?
+  deliveredAt      DateTime?
+  companyId        String
+  company          Company         @relation(fields: [companyId], references: [id])
+  createdAt        DateTime        @default(now())
+  items            OrderItem[]
+  approvals        OrderApproval[]
+}
+
+model OrderApproval {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  approverId String
+  approver   User     @relation("OrderApprover", fields: [approverId], references: [id])
+  level      Int      @default(1)
+  action     String
+  comment    String?
+  createdAt  DateTime @default(now())
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String
+  order     Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  name      String
+  quantity  Float  @default(1)
+  unitPrice Float  @default(0)
+  amount    Float  @default(0)
+  sortOrder Int    @default(0)
+}
+
+model Invoice {
+  id            String          @id @default(cuid())
+  projectId     String
+  project       Project         @relation(fields: [projectId], references: [id])
+  customerId    String?
+  customer      Customer?       @relation(fields: [customerId], references: [id])
+  invoiceNumber String          @unique
+  invoiceDate   DateTime?
+  dueDate       DateTime?
+  amount        Float
+  taxAmount     Float
+  totalAmount   Float
+  status        String          @default("未作成")
+  paidDate       DateTime?
+  notes          String?
+  reminderSentAt DateTime?
+  reminderCount  Int             @default(0)
+  companyId      String
+  company        Company         @relation(fields: [companyId], references: [id])
+  createdAt      DateTime        @default(now())
+  items          InvoiceItem[]
+  payments       PaymentRecord[]
+}
+
+model InvoiceItem {
+  id        String  @id @default(cuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  name      String
+  quantity  Float   @default(1)
+  unitPrice Float   @default(0)
+  amount    Float   @default(0)
+  sortOrder Int     @default(0)
+  taxRate   Float   @default(10)
+}
+
+model Budget {
+  id             String   @id @default(cuid())
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  category       String
+  description    String?
+  amount         Float
+  orderedAmount  Float    @default(0)
+  invoicedAmount Float    @default(0)
+  paidAmount     Float    @default(0)
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model DailyReport {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id])
+  reporterId String
+  reporter   User     @relation(fields: [reporterId], references: [id])
+  workDate   DateTime
+  weather    String?
+  content    String
+  workers    Int?
+  progress   String?
+  issues     String?
+  nextPlan   String?
+  createdAt  DateTime @default(now())
+}
+
+model Drawing {
+  id            String           @id @default(cuid())
+  projectId     String
+  project       Project          @relation(fields: [projectId], references: [id])
+  uploaderId    String
+  uploader      User             @relation(fields: [uploaderId], references: [id])
+  name          String
+  drawingType   String           @default("その他")
+  drawingNumber String?
+  version       Int              @default(1)
+  isLatest      Boolean          @default(true)
+  filePath      String
+  description   String?
+  createdAt     DateTime         @default(now())
+  pins          DrawingPin[]
+  versions      DrawingVersion[]
+}
+
+model DrawingVersion {
+  id         String   @id @default(cuid())
+  drawingId  String
+  drawing    Drawing  @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+  version    Int
+  fileUrl    String
+  fileName   String
+  uploadedBy String
+  uploader   User     @relation("DrawingVersionUploader", fields: [uploadedBy], references: [id])
+  notes      String?
+  createdAt  DateTime @default(now())
+}
+
+model PaymentRecord {
+  id            String   @id @default(cuid())
+  invoiceId     String
+  invoice       Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount        Float
+  paidAt        DateTime
+  paymentMethod String?
+  notes         String?
+  recordedBy    String
+  recorder      User     @relation("PaymentRecorder", fields: [recordedBy], references: [id])
+  createdAt     DateTime @default(now())
+}
+
+model DrawingPin {
+  id         String    @id @default(cuid())
+  drawingId  String
+  drawing    Drawing   @relation(fields: [drawingId], references: [id], onDelete: Cascade)
+  x          Float // percentage 0-100 of image width
+  y          Float // percentage 0-100 of image height
+  comment    String
+  authorId   String
+  author     User      @relation("DrawingPinAuthor", fields: [authorId], references: [id])
+  resolvedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model DocumentFolder {
+  id        String           @id @default(cuid())
+  name      String
+  parentId  String?
+  parent    DocumentFolder?  @relation("FolderHierarchy", fields: [parentId], references: [id])
+  children  DocumentFolder[] @relation("FolderHierarchy")
+  projectId String?
+  project   Project?         @relation(fields: [projectId], references: [id])
+  companyId String
+  company   Company          @relation(fields: [companyId], references: [id])
+  createdAt DateTime         @default(now())
+  documents Document[]
+}
+
+model Document {
+  id         String          @id @default(cuid())
+  name       String
+  fileName   String
+  fileUrl    String
+  fileSize   Int?
+  mimeType   String?
+  folderId   String?
+  folder     DocumentFolder? @relation(fields: [folderId], references: [id])
+  projectId  String?
+  project    Project?        @relation(fields: [projectId], references: [id])
+  uploadedBy String
+  uploader   User            @relation("DocumentUploader", fields: [uploadedBy], references: [id])
+  companyId  String
+  company    Company         @relation(fields: [companyId], references: [id])
+  createdAt  DateTime        @default(now())
+  deletedAt  DateTime?
+}
+
+model Estimate {
+  id              String         @id @default(cuid())
+  projectId       String
+  project         Project        @relation(fields: [projectId], references: [id])
+  estimateNumber  String         @unique
+  estimateDate    DateTime?
+  validUntil      DateTime?
+  amount          Float
+  taxAmount       Float          @default(0)
+  totalAmount     Float
+  status          String         @default("作成中")
+  notes           String?
+  companyId       String
+  createdAt       DateTime       @default(now())
+  createdBy       String?
+  approvedBy      String?
+  approvedAt      DateTime?
+  rejectedBy      String?
+  rejectedAt      DateTime?
+  rejectionReason String?
+  items           EstimateItem[]
+}
+
+model EstimateItem {
+  id         String   @id @default(cuid())
+  estimateId String
+  estimate   Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  name       String
+  quantity   Float    @default(1)
+  unitPrice  Float    @default(0)
+  amount     Float    @default(0)
+  sortOrder  Int      @default(0)
+}
+
+model ProjectMember {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id])
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  memberRole String   @default("一般")
+  labels     String?
+  createdAt  DateTime @default(now())
+
+  @@unique([projectId, userId])
+}
+
+model MasterItem {
+  id        String   @id @default(cuid())
+  type      String
+  value     String
+  label     String
+  sortOrder Int      @default(0)
+  companyId String
+  createdAt DateTime @default(now())
+}
+
+model InspectionTemplate {
+  id        String   @id @default(cuid())
+  name      String
+  items     String // JSON array of strings
+  companyId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  userName  String
+  action    String
+  target    String
+  targetId  String?
+  detail    String?
+  companyId String
+  createdAt DateTime @default(now())
+}
+
+model Lead {
+  id              String         @id @default(cuid())
+  title           String
+  companyName     String?
+  contactName     String?
+  contactEmail    String?
+  phone           String?
+  customerId      String?
+  customer        Customer?      @relation(fields: [customerId], references: [id])
+  customerName    String?
+  status          String         @default("新規問い合わせ")
+  source          String?
+  estimatedAmount Float?
+  assigneeId      String?
+  assignee        User?          @relation(fields: [assigneeId], references: [id])
+  contactDate     DateTime?
+  nextActionDate  DateTime?
+  notes           String?
+  projectId       String?
+  companyId       String
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  activities      LeadActivity[]
+}
+
+model LeadActivity {
+  id           String   @id @default(cuid())
+  leadId       String
+  lead         Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type         String // 電話/訪問/メール/見積提出/その他
+  content      String
+  userId       String
+  user         User     @relation("LeadActivityUser", fields: [userId], references: [id])
+  activityDate DateTime
+  createdAt    DateTime @default(now())
+}
+
+model WorkerAttendance {
+  id             String                 @id @default(cuid())
+  projectId      String
+  project        Project                @relation(fields: [projectId], references: [id])
+  workerName     String
+  company        String?
+  workDate       DateTime
+  entryTime      String?
+  exitTime       String?
+  workContent    String?
+  notes          String?
+  workingHours   Float?
+  overtimeHours  Float?
+  checkInMethod  String?                @default("manual")
+  checkOutMethod String?
+  isLocked       Boolean                @default(false)
+  companyId      String
+  createdAt      DateTime               @default(now())
+  corrections    AttendanceCorrection[]
+}
+
+model AttendanceCorrection {
+  id                String           @id @default(cuid())
+  attendanceId      String
+  attendance        WorkerAttendance @relation(fields: [attendanceId], references: [id])
+  requestedCheckIn  String?
+  requestedCheckOut String?
+  reason            String
+  status            String           @default("申請中")
+  reviewedBy        String?
+  reviewedAt        DateTime?
+  companyId         String
+  createdAt         DateTime         @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  content   String
+  type      String
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+}
+
+model WorkReport {
+  id           String    @id @default(cuid())
+  projectId    String
+  project      Project   @relation(fields: [projectId], references: [id])
+  reporterId   String
+  reporter     User      @relation(fields: [reporterId], references: [id])
+  location     String?
+  reportDate   DateTime  @default(now())
+  content      String
+  photoIds     String?
+  companyId    String
+  status       String    @default("提出済")
+  approvedBy   String?
+  approver     User?     @relation("WorkReportApprover", fields: [approvedBy], references: [id])
+  approvedAt   DateTime?
+  rejectReason String?
+  createdAt    DateTime  @default(now())
+  workerCount  Int?
+  workHours    Float?
+  weather      String?
+  materials    String?
+  equipment    String?
+  nextDayPlan  String?
+  comment      String?
+}
+
+model NotificationSetting {
+  id      String  @id @default(cuid())
+  userId  String
+  type    String
+  enabled Boolean @default(true)
+
+  @@unique([userId, type])
+}
+
+model LoginSession {
+  id         String   @id @default(cuid())
+  userId     String
+  ipAddress  String?
+  userAgent  String?
+  browser    String?
+  lastAccess DateTime @default(now())
+  companyId  String
+}
+
+model Announcement {
+  id             String    @id @default(cuid())
+  title          String
+  content        String?
+  status         String    @default("下書き")
+  publishedAt    DateTime?
+  isSurvey       Boolean   @default(false)
+  surveyDeadline DateTime?
+  companyId      String
+  company        Company   @relation("AnnouncementCompany", fields: [companyId], references: [id])
+  createdAt      DateTime  @default(now())
+  category       String    @default("お知らせ")
+  isPinned       Boolean   @default(false)
+  expiresAt      DateTime?
+  authorId       String?
+  author         User?     @relation("AnnouncementAuthor", fields: [authorId], references: [id])
+}
+
+model Webhook {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  events    String
+  isActive  Boolean  @default(true)
+  secret    String?
+  companyId String
+  createdAt DateTime @default(now())
+}
+
+model WebhookConfig {
+  id        String       @id @default(cuid())
+  url       String
+  events    String // JSON array of event types e.g. ["project.created","order.approved"]
+  secret    String? // HMAC secret for signature
+  enabled   Boolean      @default(true)
+  companyId String
+  company   Company      @relation(fields: [companyId], references: [id])
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  logs      WebhookLog[]
+}
+
+model WebhookLog {
+  id           String        @id @default(cuid())
+  configId     String
+  config       WebhookConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  event        String
+  payload      String // JSON string
+  statusCode   Int?
+  responseBody String?
+  success      Boolean
+  sentAt       DateTime      @default(now())
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  name       String
+  key        String    @unique
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  enabled    Boolean   @default(true)
+  companyId  String
+  company    Company   @relation(fields: [companyId], references: [id])
+  createdAt  DateTime  @default(now())
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model ProjectShareToken {
+  id         String    @id @default(cuid())
+  projectId  String
+  project    Project   @relation(fields: [projectId], references: [id])
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  token      String    @unique
+  label      String?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+model KyActivity {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id])
+  activityDate DateTime
+  leader       String?
+  participants String?
+  risks        String
+  location     String?
+  notes        String?
+  companyId    String
+  createdAt    DateTime @default(now())
+}
+
+model NearMiss {
+  id             String   @id @default(cuid())
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id])
+  reporterId     String
+  reporter       User     @relation(fields: [reporterId], references: [id])
+  occurredAt     DateTime
+  location       String?
+  situation      String
+  cause          String?
+  countermeasure String?
+  severity       String   @default("低")
+  status         String   @default("報告済")
+  companyId      String
+  createdAt      DateTime @default(now())
+}
+
+model AfterServiceRecord {
+  id          String    @id @default(cuid())
+  customerId  String
+  customer    Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  projectId   String?
+  project     Project?  @relation(fields: [projectId], references: [id])
+  reportedAt  DateTime
+  content     String
+  response    String?
+  respondedAt DateTime?
+  status      String    @default("未対応")
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Department {
+  id                String             @id @default(cuid())
+  name              String
+  code              String?
+  managerId         String?
+  companyId         String
+  company           Company            @relation(fields: [companyId], references: [id])
+  manager           User?              @relation("DeptManager", fields: [managerId], references: [id])
+  createdAt         DateTime           @default(now())
+  departmentBudgets DepartmentBudget[]
+
+  @@unique([name, companyId])
+}
+
+model DepartmentBudget {
+  id           String     @id @default(cuid())
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+  year         Int
+  month        Int?
+  category     String
+  budgetAmount Float
+  actualAmount Float      @default(0)
+  companyId    String
+  company      Company    @relation(fields: [companyId], references: [id])
+  createdAt    DateTime   @default(now())
+}
+
+model WorkerRoster {
+  id               String    @id @default(cuid())
+  projectId        String
+  project          Project   @relation(fields: [projectId], references: [id])
+  workerId         String?
+  workerName       String
+  company          String
+  birthDate        DateTime?
+  jobType          String?
+  certifications   String?
+  bloodType        String?
+  emergencyContact String?
+  emergencyPhone   String?
+  insuranceType    String?
+  entryDate        DateTime?
+  exitDate         DateTime?
+  companyId        String
+  companyRel       Company   @relation(fields: [companyId], references: [id])
+  createdAt        DateTime  @default(now())
+}
+
+model SubcontractorNotice {
+  id              String    @id @default(cuid())
+  projectId       String
+  project         Project   @relation(fields: [projectId], references: [id])
+  contractorName  String
+  representative  String?
+  address         String?
+  licenseNumber   String?
+  workType        String
+  workPeriodStart DateTime?
+  workPeriodEnd   DateTime?
+  companyId       String
+  companyRel      Company   @relation(fields: [companyId], references: [id])
+  createdAt       DateTime  @default(now())
+}
+
+model TaxRate {
+  id        String   @id @default(cuid())
+  name      String
+  rate      Float
+  isDefault Boolean  @default(false)
+  enabled   Boolean  @default(true)
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ConstructionLedger {
+  id             String    @id @default(cuid())
+  projectId      String
+  project        Project   @relation(fields: [projectId], references: [id])
+  contractorName String
+  contractorType String
+  workType       String
+  contractAmount Float?
+  startDate      DateTime?
+  endDate        DateTime?
+  supervisorName String?
+  licenseNumber  String?
+  companyId      String
+  company        Company   @relation(fields: [companyId], references: [id])
+  createdAt      DateTime  @default(now())
+}
+
+model IpRestriction {
+  id          String   @id @default(cuid())
+  cidr        String
+  description String?
+  enabled     Boolean  @default(true)
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  type      String
+  subject   String
+  body      String
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@unique([companyId, type])
+}
+
+model UserPreference {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id])
+  dashboardWidgets String   @default("[]")
+  updatedAt        DateTime @updatedAt
+}
+
+model ProjectTemplate {
+  id                 String                  @id @default(cuid())
+  name               String
+  description        String?
+  workType           String?
+  companyId          String
+  company            Company                 @relation(fields: [companyId], references: [id])
+  createdAt          DateTime                @default(now())
+  scheduleTemplates  ScheduleTemplate[]
+  checklistTemplates ChecklistTemplateItem[]
+}
+
+model ScheduleTemplate {
+  id           String          @id @default(cuid())
+  templateId   String
+  template     ProjectTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name         String
+  offsetDays   Int             @default(0)
+  durationDays Int             @default(1)
+  category     String?
+}
+
+model ChecklistTemplateItem {
+  id         String          @id @default(cuid())
+  templateId String
+  template   ProjectTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  content    String
+  category   String?
+}
+
+model WorkOrder {
+  id          String    @id @default(cuid())
+  orderNumber String
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id])
+  title       String
+  description String?
+  assignedTo  String?
+  assignee    User?     @relation("WorkOrderAssignee", fields: [assignedTo], references: [id])
+  dueDate     DateTime?
+  status      String    @default("未着手")
+  priority    String    @default("中")
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id])
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+}
+
+model CustomerSurvey {
+  id                 String    @id @default(cuid())
+  projectId          String
+  project            Project   @relation(fields: [projectId], references: [id])
+  customerId         String?
+  customer           Customer? @relation(fields: [customerId], references: [id])
+  token              String    @unique @default(cuid())
+  status             String    @default("未送信")
+  sentAt             DateTime?
+  respondedAt        DateTime?
+  overallScore       Int?
+  qualityScore       Int?
+  scheduleScore      Int?
+  communicationScore Int?
+  comments           String?
+  companyId          String
+  company            Company   @relation(fields: [companyId], references: [id])
+  createdAt          DateTime  @default(now())
+}
+
+model SiteDiary {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id])
+  date         DateTime
+  weather      String?
+  temperature  Float?
+  workers      Int?
+  workContent  String?
+  issues       String?
+  tomorrowPlan String?
+  authorId     String
+  author       User     @relation("SiteDiaryAuthor", fields: [authorId], references: [id])
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([projectId, date])
+}
+
+model ProjectCompletion {
+  id                  String    @id @default(cuid())
+  projectId           String    @unique
+  project             Project   @relation(fields: [projectId], references: [id])
+  finalInspectionDone Boolean   @default(false)
+  customerAccepted    Boolean   @default(false)
+  invoiceIssued       Boolean   @default(false)
+  documentsArchived   Boolean   @default(false)
+  completedAt         DateTime?
+  notes               String?
+  companyId           String
+  company             Company   @relation(fields: [companyId], references: [id])
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+model EstimateTemplate {
+  id        String                 @id @default(cuid())
+  name      String
+  category  String?
+  items     EstimateTemplateItem[]
+  companyId String
+  company   Company                @relation(fields: [companyId], references: [id])
+  createdAt DateTime               @default(now())
+}
+
+model EstimateTemplateItem {
+  id          String           @id @default(cuid())
+  templateId  String
+  template    EstimateTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  description String
+  unit        String?
+  unitPrice   Float
+  quantity    Float            @default(1)
+  sortOrder   Int              @default(0)
+}
+
+model Invitation {
+  id        String   @id @default(cuid())
+  email     String
+  role      String   @default("一般")
+  token     String   @unique @default(cuid())
+  status    String   @default("招待中")
+  expiresAt DateTime
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CompletionDocument {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id])
+  category    String
+  name        String
+  fileUrl     String
+  fileName    String
+  uploadedBy  String
+  uploader    User     @relation("CompletionDocUploader", fields: [uploadedBy], references: [id])
+  notes       String?
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+model WorkerCertification {
+  id         String    @id @default(cuid())
+  workerName String
+  userId     String?
+  user       User?     @relation("WorkerCert", fields: [userId], references: [id])
+  certName   String
+  certNumber String?
+  issuedAt   DateTime?
+  expiresAt  DateTime?
+  issuedBy   String?
+  companyId  String
+  company    Company   @relation(fields: [companyId], references: [id])
+  createdAt  DateTime  @default(now())
+}
+
+model SafetyEducation {
+  id         String   @id @default(cuid())
+  projectId  String?
+  project    Project? @relation(fields: [projectId], references: [id])
+  title      String
+  educatedAt DateTime
+  instructor String?
+  attendees  String
+  content    String?
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id])
+  createdAt  DateTime @default(now())
+}
+
+model MaterialMaster {
+  id         String    @id @default(cuid())
+  code       String?
+  name       String
+  unit       String
+  unitPrice  Float
+  category   String?
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+  enabled    Boolean   @default(true)
+  companyId  String
+  company    Company   @relation(fields: [companyId], references: [id])
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model Expense {
+  id          String    @id @default(cuid())
+  projectId   String?
+  project     Project?  @relation(fields: [projectId], references: [id])
+  category    String
+  description String
+  amount      Float
+  expenseDate DateTime
+  receiptUrl  String?
+  status      String    @default("申請中")
+  submittedBy String
+  submitter   User      @relation("ExpenseSubmitter", fields: [submittedBy], references: [id])
+  approvedBy  String?
+  approver    User?     @relation("ExpenseApprover", fields: [approvedBy], references: [id])
+  approvedAt  DateTime?
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id])
+  createdAt   DateTime  @default(now())
+}
+
+model CostCategory {
+  id        String   @id @default(cuid())
+  name      String
+  code      String?
+  sortOrder Int      @default(0)
+  enabled   Boolean  @default(true)
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([name, companyId])
+}
+
+model MonthlyAttendanceLock {
+  id        String   @id @default(cuid())
+  month     String
+  lockedAt  DateTime @default(now())
+  lockedBy  String
+  locker    User     @relation("AttendanceLockUser", fields: [lockedBy], references: [id])
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+
+  @@unique([month, companyId])
+}
+
+model AdvancePayment {
+  id          String    @id @default(cuid())
+  projectId   String?
+  project     Project?  @relation(fields: [projectId], references: [id])
+  purpose     String
+  amount      Float
+  requestedBy String
+  requester   User      @relation("AdvanceRequester", fields: [requestedBy], references: [id])
+  status      String    @default("申請中")
+  approvedBy  String?
+  approver    User?     @relation("AdvanceApprover", fields: [approvedBy], references: [id])
+  approvedAt  DateTime?
+  settledAt   DateTime?
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id])
+  createdAt   DateTime  @default(now())
+}
+
+model LeaveRequest {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation("LeaveRequester", fields: [userId], references: [id])
+  leaveType   String    @default("有給")
+  startDate   DateTime
+  endDate     DateTime
+  days        Float
+  reason      String?
+  status      String    @default("申請中")
+  approvedBy  String?
+  approver    User?     @relation("LeaveApprover", fields: [approvedBy], references: [id])
+  approvedAt  DateTime?
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id])
+  createdAt   DateTime  @default(now())
+}
+
+model Shift {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation("ShiftUser", fields: [userId], references: [id])
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+  date      DateTime
+  startTime String
+  endTime   String
+  role      String?
+  notes     String?
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Task {
+  id                String    @id @default(cuid())
+  title             String
+  description       String?
+  projectId         String?
+  project           Project?  @relation(fields: [projectId], references: [id])
+  assignedTo        String?
+  assignee          User?     @relation("TaskAssignee", fields: [assignedTo], references: [id])
+  createdBy         String
+  creator           User      @relation("TaskCreator", fields: [createdBy], references: [id])
+  dueDate           DateTime?
+  priority          String    @default("中")
+  status            String    @default("未着手")
+  companyId         String
+  company           Company   @relation(fields: [companyId], references: [id])
+  createdAt         DateTime  @default(now())
+  completedAt       DateTime?
+  isRecurring       Boolean   @default(false)
+  recurringPattern  String?
+  recurringEndDate  DateTime?
+  parentTaskId      String?
+}
+
+model ProjectRisk {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id])
+  title       String
+  description String?
+  probability Int
+  impact      Int
+  riskScore   Int
+  category    String?
+  status      String   @default("未対応")
+  mitigation  String?
+  owner       String?
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Vehicle {
+  id               String    @id @default(cuid())
+  name             String
+  plateNumber      String
+  vehicleType      String
+  status           String    @default("利用可能")
+  projectId        String?
+  project          Project?  @relation(fields: [projectId], references: [id])
+  assignedTo       String?
+  driver           User?     @relation("VehicleDriver", fields: [assignedTo], references: [id])
+  lastInspectedAt  DateTime?
+  nextInspectionAt DateTime?
+  mileage          Int?
+  fuelType         String?
+  notes            String?
+  companyId        String
+  company          Company   @relation(fields: [companyId], references: [id])
+  createdAt        DateTime  @default(now())
+}
+
+model Tool {
+  id         String   @id @default(cuid())
+  name       String
+  toolNumber String?
+  category   String
+  quantity   Int      @default(1)
+  available  Int      @default(1)
+  location   String?
+  projectId  String?
+  project    Project? @relation(fields: [projectId], references: [id])
+  condition  String   @default("良好")
+  notes      String?
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id])
+  createdAt  DateTime @default(now())
+}
+
+model Insurance {
+  id           String    @id @default(cuid())
+  name         String
+  insurerName  String
+  policyNumber String?
+  insuredType  String
+  projectId    String?
+  project      Project?  @relation(fields: [projectId], references: [id])
+  startDate    DateTime?
+  endDate      DateTime?
+  premium      Float?
+  coverage     Float?
+  notes        String?
+  companyId    String
+  company      Company   @relation(fields: [companyId], references: [id])
+  createdAt    DateTime  @default(now())
+}
+
+model Inquiry {
+  id          String    @id @default(cuid())
+  name        String
+  email       String?
+  phone       String?
+  subject     String
+  message     String
+  source      String    @default("問い合わせフォーム")
+  status      String    @default("未対応")
+  assignedTo  String?
+  assignee    User?     @relation("InquiryAssignee", fields: [assignedTo], references: [id])
+  response    String?
+  respondedAt DateTime?
+  customerId  String?
+  customer    Customer? @relation(fields: [customerId], references: [id])
+  projectId   String?
+  project     Project?  @relation(fields: [projectId], references: [id])
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id])
+  createdAt   DateTime  @default(now())
+}
+
+model Milestone {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id])
+  title       String
+  description String?
+  dueDate     DateTime
+  completedAt DateTime?
+  status      String    @default("未完了")
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id])
+  createdAt   DateTime  @default(now())
+}
+
+model Contract {
+  id             String    @id @default(cuid())
+  projectId      String?
+  project        Project?  @relation(fields: [projectId], references: [id])
+  customerId     String?
+  customer       Customer? @relation(fields: [customerId], references: [id])
+  contractNumber String
+  title          String
+  contractType   String
+  amount         Float?
+  startDate      DateTime?
+  endDate        DateTime?
+  signedAt       DateTime?
+  fileUrl        String?
+  fileName       String?
+  status         String    @default("作成中")
+  notes          String?
+  companyId      String
+  company        Company   @relation(fields: [companyId], references: [id])
+  createdAt      DateTime  @default(now())
+}
+
+model Warranty {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id])
+  title      String
+  category   String
+  startDate  DateTime
+  endDate    DateTime
+  contractor String?
+  notes      String?
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id])
+  createdAt  DateTime @default(now())
+}
+
+model MaterialOrder {
+  id          String    @id @default(cuid())
+  projectId   String
+  name        String
+  quantity    Float
+  unit        String    @default("個")
+  unitPrice   Float?
+  totalAmount Float?
+  orderedAt   DateTime?
+  deliveredAt DateTime?
+  supplier    String?
+  status      String    @default("未発注")
+  notes       String?
+  companyId   String
+  createdAt   DateTime  @default(now())
+  project     Project   @relation(fields: [projectId], references: [id])
+  company     Company   @relation(fields: [companyId], references: [id])
+}
+
+model ReportSchedule {
+  id          String    @id @default(cuid())
+  companyId   String
+  name        String
+  reportType  String
+  frequency   String
+  dayOfWeek   Int?
+  dayOfMonth  Int?
+  recipients  String
+  enabled     Boolean   @default(true)
+  lastSentAt  DateTime?
+  createdAt   DateTime  @default(now())
+  company     Company   @relation(fields: [companyId], references: [id])
+}
+
+model Bid {
+  id                 String    @id @default(cuid())
+  projectId          String?
+  title              String
+  bidDate            DateTime
+  submissionDeadline DateTime?
+  estimatedAmount    Float?
+  bidAmount          Float?
+  status             String    @default("準備中")
+  result             String?
+  competitors        Int       @default(0)
+  notes              String?
+  companyId          String
+  createdAt          DateTime  @default(now())
+  project            Project?  @relation(fields: [projectId], references: [id])
+  company            Company   @relation(fields: [companyId], references: [id])
+}
