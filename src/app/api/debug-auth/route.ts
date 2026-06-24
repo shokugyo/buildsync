@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma'
 import bcrypt from 'bcryptjs'
 
 export async function GET() {
+  const rawUrl = process.env.DATABASE_URL ?? 'NOT SET'
+  const maskedUrl = rawUrl.replace(/:([^:@]+)@/, ':***@')
+
   try {
     const user = await prisma.user.findUnique({
       where: { email: 'admin@buildsync.jp' },
@@ -10,7 +13,7 @@ export async function GET() {
     })
 
     if (!user) {
-      return NextResponse.json({ status: 'USER_NOT_FOUND' })
+      return NextResponse.json({ status: 'USER_NOT_FOUND', databaseUrl: maskedUrl })
     }
 
     const passwordMatch = await bcrypt.compare('admin1234', user.password)
@@ -21,8 +24,9 @@ export async function GET() {
       failedAttempts: user.failedLoginAttempts,
       locked: user.lockedUntil ? user.lockedUntil > new Date() : false,
       passwordMatch,
+      databaseUrl: maskedUrl,
     })
   } catch (e: any) {
-    return NextResponse.json({ status: 'ERROR', error: e.message }, { status: 500 })
+    return NextResponse.json({ status: 'ERROR', error: e.message, databaseUrl: maskedUrl }, { status: 500 })
   }
 }
