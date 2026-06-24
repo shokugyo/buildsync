@@ -142,20 +142,6 @@ export default function LoginPage() {
           </div>
         </form>
 
-        <div className="mt-6 pt-6 border-t border-slate-100">
-          <p className="text-xs text-slate-500 text-center mb-3">デモ用アカウント</p>
-          <div className="space-y-2 text-xs text-slate-600">
-            <div className="bg-slate-50 rounded p-2">
-              <span className="font-medium">管理者: </span>admin@buildsync.jp / admin1234
-            </div>
-            <div className="bg-slate-50 rounded p-2">
-              <span className="font-medium">現場監督: </span>tanaka@buildsync.jp / pass1234
-            </div>
-            <div className="bg-slate-50 rounded p-2">
-              <span className="font-medium">事務担当: </span>sato@buildsync.jp / pass1234
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   )
